@@ -2,10 +2,13 @@
 /**
  * Prints the bonk log in a readable form.
  *
- *   npm run log                  the last 20 DMs
- *   npm run log -- --all         everything
- *   npm run log -- --full        include the full message body of each DM
- *   npm run log -- --runs        one line per /bonk invocation instead
+ *   npm run bonks                the last 20 DMs
+ *   npm run bonks -- --all       everything
+ *   npm run bonks -- --full      include the full message body of each DM
+ *   npm run bonks -- --runs      one line per /bonk invocation instead
+ *
+ * Not to be confused with `npm run logs`, which tails the bot's own output
+ * from the container. This one is the record of what was sent to people.
  *
  * Read-only. It never contacts Discord.
  */

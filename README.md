@@ -173,7 +173,9 @@ forwarding, public IP, domain or TLS certificate involved.
 
 ```bash
 docker compose up -d --build     # start, and come back automatically on boot
-docker compose logs -f           # watch it
+npm run logs                     # watch what the bot is doing
+npm run status                   # is it up?
+npm run bonks                    # what it has actually sent
 docker compose restart           # after editing .env
 docker compose down              # stop it
 ```
@@ -240,11 +242,15 @@ invoked it, the event, the recipient, whether it succeeded, and the full message
 body that went out.
 
 ```bash
-npm run log                # the last 20 DMs
-npm run log -- --full      # include each message body
-npm run log -- --runs      # one line per /bonk invocation
-npm run log -- --all       # everything
+npm run bonks              # the last 20 DMs
+npm run bonks -- --full    # include each message body
+npm run bonks -- --runs    # one line per /bonk invocation
+npm run bonks -- --all     # everything
 ```
+
+Two different things are called "logs" in this project, so the scripts keep them
+apart: `npm run bonks` is the record of what was **sent to people**, while
+`npm run logs` tails what the **bot itself** is doing in the container.
 
 Nothing reads this file back to decide who gets a DM — `/bonk` deliberately has
 no memory between runs. It is there so you can answer "what did we send, to

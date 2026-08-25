@@ -8,7 +8,7 @@
  * rather than reconstructed from Discord.
  *
  * One JSON object per line (JSONL), so it appends cheaply, survives a partial
- * write at the end of the file, and can be read with `npm run log`, grep or jq.
+ * write at the end of the file, and can be read with `npm run bonks`, grep or jq.
  *
  * Writing here must never break a send that is otherwise working: an audit
  * failure is reported and swallowed.
