@@ -6,6 +6,7 @@
 .github
 .idea
 node_modules
+logs
 test
 *.md
 Dockerfile

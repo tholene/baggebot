@@ -286,3 +286,91 @@ test("no guild means shortcodes pass through untouched", async () => {
   const { makeEmojiResolver } = await import("../src/lib/bonk.mjs");
   assert.equal(makeEmojiResolver(null)(":BONK:"), ":BONK:");
 });
+
+test("the bonk log appends one JSON record per attempt", async (t) => {
+  const { rm, readFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+
+  const dir = await mkdtemp(join(tmpdir(), "bonklog-"));
+  const file = join(dir, "nested", "bonks.jsonl");
+  const previous = process.env.BONK_LOG_FILE;
+  process.env.BONK_LOG_FILE = file;
+  t.after(async () => {
+    if (previous === undefined) delete process.env.BONK_LOG_FILE;
+    else process.env.BONK_LOG_FILE = previous;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const { recordBonk } = await import("../src/lib/audit.mjs");
+  const base = {
+    runId: "run-1", eventId: "e1", eventTitle: "Thursday Raid", eventStart: 1787855400,
+    invokedBy: { id: "1", tag: "ebri" },
+  };
+  // The directory does not exist yet - it must be created, not error.
+  await recordBonk({ ...base, recipient: { id: "9", displayName: "jazz" }, status: "sent", message: "hi" });
+  await recordBonk({ ...base, recipient: { id: "8", displayName: "Magi" }, status: "failed", reason: "has DMs closed", code: 50007 });
+
+  const lines = (await readFile(file, "utf8")).trim().split("\n");
+  assert.equal(lines.length, 2, "must append, not overwrite");
+
+  const [first, second] = lines.map((l) => JSON.parse(l));
+  assert.equal(first.status, "sent");
+  assert.equal(first.recipient.displayName, "jazz");
+  assert.equal(first.message, "hi", "the body is what lets you verify what was sent");
+  assert.equal(first.eventTitle, "Thursday Raid");
+  assert.ok(Date.parse(first.at), "every record is timestamped");
+
+  assert.equal(second.status, "failed");
+  assert.equal(second.code, 50007);
+  assert.equal(second.reason, "has DMs closed");
+});
+
+test("a failing bonk log never breaks the send", async (t) => {
+  const previous = process.env.BONK_LOG_FILE;
+  // A path that cannot be created: /dev/null is a file, so it cannot be a dir.
+  process.env.BONK_LOG_FILE = "/dev/null/cannot/exist/bonks.jsonl";
+  t.after(() => {
+    if (previous === undefined) delete process.env.BONK_LOG_FILE;
+    else process.env.BONK_LOG_FILE = previous;
+  });
+
+  const { recordBonk } = await import("../src/lib/audit.mjs");
+  // Must resolve, not throw - losing the record is survivable, aborting a
+  // half-finished DM run is not.
+  await recordBonk({
+    runId: "r", eventId: "e", eventTitle: "t", invokedBy: { id: "1", tag: "x" },
+    recipient: { id: "2", displayName: "y" }, status: "sent", message: "m",
+  });
+});
+
+test("the bonk log never contains the bot token", async (t) => {
+  const { rm, readFile, mkdtemp } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+
+  const dir = await mkdtemp(join(tmpdir(), "bonklog-"));
+  const file = join(dir, "bonks.jsonl");
+  const previousFile = process.env.BONK_LOG_FILE;
+  const previousToken = process.env.DISCORD_BOT_TOKEN;
+  process.env.BONK_LOG_FILE = file;
+  process.env.DISCORD_BOT_TOKEN = "pretend-token-value-that-is-long-enough-to-scrub";
+  t.after(async () => {
+    if (previousFile === undefined) delete process.env.BONK_LOG_FILE;
+    else process.env.BONK_LOG_FILE = previousFile;
+    if (previousToken === undefined) delete process.env.DISCORD_BOT_TOKEN;
+    else process.env.DISCORD_BOT_TOKEN = previousToken;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  const { recordBonk } = await import("../src/lib/audit.mjs");
+  await recordBonk({
+    runId: "r", eventId: "e", eventTitle: "t", invokedBy: { id: "1", tag: "x" },
+    recipient: { id: "2", displayName: "y" }, status: "sent",
+    message: "oops pretend-token-value-that-is-long-enough-to-scrub leaked",
+  });
+
+  const written = await readFile(file, "utf8");
+  assert.ok(!written.includes("pretend-token-value-that-is-long-enough-to-scrub"));
+  assert.ok(written.includes("<redacted-token>"));
+});

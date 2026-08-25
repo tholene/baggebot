@@ -33,6 +33,7 @@ scripts/            one-shot tools, run by hand
   purge-channel.mjs       delete every message in one channel
   react.mjs               add or remove one reaction
 test/               runs without network or Discord
+logs/               record of DMs actually sent (gitignored)
 ```
 
 ---
@@ -232,6 +233,28 @@ and each DM costs two Discord calls. That caps a single run at roughly 24
 recipients, under a 40-person roster. The paid plan costs more than Fly and needs
 a real rewrite. Not worth it at this scale.
 
+## What was actually sent
+
+Every DM attempt appends one JSON line to `logs/bonks.jsonl` — timestamp, who
+invoked it, the event, the recipient, whether it succeeded, and the full message
+body that went out.
+
+```bash
+npm run log                # the last 20 DMs
+npm run log -- --full      # include each message body
+npm run log -- --runs      # one line per /bonk invocation
+npm run log -- --all       # everything
+```
+
+Nothing reads this file back to decide who gets a DM — `/bonk` deliberately has
+no memory between runs. It is there so you can answer "what did we send, to
+whom, when" after the fact rather than reconstructing it from Discord. A failure
+to write it is reported and swallowed: losing the record is survivable, aborting
+a half-finished DM run is not.
+
+It is gitignored, since it contains member names and message bodies, and it is a
+mounted volume in the container so it survives a rebuild.
+
 ## Safety model
 
 Mass-DMing is precisely what Discord's spam rules target, so:
@@ -251,6 +274,7 @@ Mass-DMing is precisely what Discord's spam rules target, so:
 * **Closed DMs are expected, not fatal.** They surface as `50007`, get collected,
   and are reported as a copy-pasteable list to chase by hand.
 * **Never sent to anyone without the raider role.**
+* **Every attempt is recorded** to `logs/bonks.jsonl`, including the message body.
 
 ## When Raid-Helper's API shape changes
 

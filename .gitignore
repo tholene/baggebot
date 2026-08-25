@@ -11,5 +11,12 @@ node_modules/
 npm-debug.log*
 .DS_Store
 
+# Record of DMs actually sent. Local runtime output, not configuration, and it
+# contains member names and message bodies. The directory itself is tracked:
+# Docker auto-creates a missing bind-mount target as root, which the container
+# then cannot write to.
+logs/*
+!logs/.gitkeep
+
 # IDE
 .idea/

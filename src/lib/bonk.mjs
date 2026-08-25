@@ -16,6 +16,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { SafeError, sleep, log } from "./safe.mjs";
+import { recordBonk } from "./audit.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -132,6 +133,7 @@ export async function sendBonks({
   template,
   config,
   resolveEmoji,
+  run,
   onProgress,
 }) {
   const sent = [];
@@ -139,17 +141,30 @@ export async function sendBonks({
   const failures = [];
 
   for (const [index, member] of members.entries()) {
+    const audit = {
+      runId: run.id,
+      eventId: event.id,
+      eventTitle: event.title,
+      eventStart: event.startTime,
+      invokedBy: run.invokedBy,
+      recipient: { id: member.id, displayName: member.displayName },
+    };
+
     try {
       assertBonkable(member, { event, config });
     } catch (error) {
       // Not a failure - the world changed since the preview. Note it and move on.
       skipped.push({ member, reason: error.message });
+      await recordBonk({ ...audit, status: "skipped", reason: error.message });
       continue;
     }
 
+    const body = renderMessage(template, { member, event, guildId, resolveEmoji });
+
     try {
-      await member.send(renderMessage(template, { member, event, guildId, resolveEmoji }));
+      await member.send(body);
       sent.push(member);
+      await recordBonk({ ...audit, status: "sent", message: body });
       log(`[${index + 1}/${members.length}] bonked ${member.displayName} (${member.id})`);
     } catch (error) {
       const code = error?.code;
@@ -158,6 +173,7 @@ export async function sendBonks({
           ? "has DMs closed"
           : `DM failed (${error?.message ?? "unknown error"})`;
       failures.push({ member, reason, code });
+      await recordBonk({ ...audit, status: "failed", reason, code, message: body });
       log(`[${index + 1}/${members.length}] FAILED ${member.displayName}: ${reason}`);
 
       // A missing-access or unauthorised response will repeat for everyone;

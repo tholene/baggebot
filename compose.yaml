@@ -23,8 +23,12 @@ services:
     restart: unless-stopped
 
     env_file: .env
+    environment:
+      BONK_LOG_FILE: /app/logs/bonks.jsonl
 
     volumes:
+      # The record of what was actually sent. Must outlive the container.
+      - ./logs:/app/logs
       # Mounted rather than baked in, so editing the wording takes effect on the
       # next /bonk without a rebuild or restart.
       - ./bonk-message.txt:/app/bonk-message.txt:ro

@@ -18,6 +18,8 @@ FROM node:24-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
+# Written to a mounted volume, not the image layer - see compose.yaml.
+ENV BONK_LOG_FILE=/app/logs/bonks.jsonl
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
@@ -25,6 +27,9 @@ COPY src ./src
 COPY scripts ./scripts
 COPY bonk-message.txt ./
 
+# uid 1000 matches a typical Linux desktop account, so a bind-mounted ./logs
+# stays writable from inside the container.
+RUN mkdir -p /app/logs && chown -R node:node /app/logs
 USER node
 
 # The bot traps SIGTERM and closes the gateway socket cleanly; tini (via

@@ -272,6 +272,10 @@ export async function execute(interaction, context) {
     template,
     config,
     resolveEmoji,
+    run: {
+      id: interaction.id,
+      invokedBy: { id: interaction.user.id, tag: interaction.user.tag },
+    },
     onProgress: async (done, total) => {
       await interaction.editReply({ content: `Sending DMs… ${done}/${total}` });
     },
