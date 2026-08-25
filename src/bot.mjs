@@ -64,6 +64,13 @@ async function main() {
   const pruned = await state.prune(Date.now());
   if (pruned > 0) log(`Pruned bonk history for ${pruned} event(s) older than 30 days.`);
 
+  if (config.raidChannelIds.length === 0) {
+    log(
+      "NOTE: RAID_CHANNEL_IDS is not set, so /bonk will consider Raid-Helper events " +
+        "from every channel - including non-raid ones. Set it to your signup channel."
+    );
+  }
+
   if (!config.raidHelperApiKey) {
     log(
       "NOTE: RAID_HELPER_TOKEN is not set, so /bonk cannot auto-pick the next raid. " +
@@ -87,6 +94,11 @@ async function main() {
     log(`Logged in as ${ready.user.tag} (id ${ready.user.id})`);
     log(`Serving guild ${config.guildId}; raider role ${config.raiderRoleId}`);
     log(`Officer role ${config.officerRoleId}; max ${config.maxDm} DMs per run`);
+    log(
+      `Raid channels: ${
+        config.raidChannelIds.length ? config.raidChannelIds.join(", ") : "(all - unfiltered)"
+      }`
+    );
     log("Ready. Waiting for /bonk.");
   });
 

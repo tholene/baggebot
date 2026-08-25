@@ -1,4 +1,4 @@
-Hey {user}! Ebri asked me to remind you that you haven't signed up for **{event}** yet.
+Hey {user}! Ebri asked me to remind you that you haven't signed up for **{event}** yet. :BONK:
 
 It starts {time_relative} ({time_absolute}).
 

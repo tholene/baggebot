@@ -101,6 +101,7 @@ Roles → right-click a role → **Copy Role ID**.
 | `RAIDER_ROLE_ID` | The roster. Everyone with this role is expected to sign up. |
 | `OFFICER_ROLE_ID` | Who may run `/bonk`. Checked server-side, every invocation. |
 | `EXCLUDE_ROLE_IDS` | Optional, comma-separated. Trials, socials, alt-only members. |
+| `RAID_CHANNEL_IDS` | Comma-separated channels raids are posted in. Events elsewhere are ignored. |
 | `RAID_HELPER_TOKEN` | From `/apikey`. Needed for auto-picking the next raid. |
 | `MAX_DM` | Refuse to send more than this many DMs in one run. Default 40. |
 | `DM_DELAY_MS` | Milliseconds between DMs. Default 2500, minimum 1000. |
@@ -125,6 +126,16 @@ change. Editing the DM wording or the handler logic doesn't need it.
 
 The event ID is the Discord message ID of the Raid-Helper post: right-click it
 and Copy Message ID.
+
+With no `event:`, `/bonk` picks the **soonest event that has not started yet**,
+considering only channels listed in `RAID_CHANNEL_IDS`. A raid already underway
+is never picked, so you cannot bonk people for a raid they are currently in.
+
+That channel filter matters: guilds post other Raid-Helper events — roster
+sign-ups, alt lists, other teams' raids — and without it a non-raid event
+scheduled sooner would be picked and its non-signers DMed. The filter applies to
+an explicitly passed `event:` too, since pasting the wrong link is exactly the
+mistake worth catching.
 
 ## The DM
 

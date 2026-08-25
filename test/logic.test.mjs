@@ -209,3 +209,80 @@ test("login failures explain which switch to flip", async () => {
   const unknown = new Error("something else entirely");
   assert.equal(explainLoginError(unknown), unknown);
 });
+
+test("findNextEvent only considers configured raid channels", async () => {
+  const { makeRaidHelper } = await import("../src/lib/raidhelper.mjs");
+  const RAID = "1279867299066675321";
+  const OTHER = "1255092003109081120";
+  const now = 1_000_000;
+
+  // Stand in for the API: one page, a non-raid event scheduled sooner than the
+  // real raid. Without the filter the sooner one wins and the wrong people get DMed.
+  const page = {
+    pages: 1, eventsOverall: 2,
+    postedEvents: [
+      { id: "a", title: "Roster thing", channelId: OTHER, startTime: now + 100 },
+      { id: "b", title: "Thursday Raid", channelId: RAID, startTime: now + 200 },
+    ],
+  };
+  const events = {
+    a: { id: "a", title: "Roster thing", channelId: OTHER, startTime: now + 100, signUps: [] },
+    b: { id: "b", title: "Thursday Raid", channelId: RAID, startTime: now + 200, signUps: [] },
+  };
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const single = String(url).match(/\/events\/(\w+)$/);
+    const body = single ? events[single[1]] : page;
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+
+  try {
+    const rh = makeRaidHelper("test-key");
+    const filtered = await rh.findNextEvent("guild", now, [RAID]);
+    assert.equal(filtered.id, "b", "picked an event outside the raid channel");
+
+    const unfiltered = await rh.findNextEvent("guild", now, []);
+    assert.equal(unfiltered.id, "a", "no filter should mean no filtering");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("listEvents refuses a partial calendar rather than guessing", async () => {
+  const { makeRaidHelper } = await import("../src/lib/raidhelper.mjs");
+  const originalFetch = globalThis.fetch;
+  // Claims 9 events overall but hands back 1 and says there is only one page.
+  globalThis.fetch = async () =>
+    new Response(
+      JSON.stringify({ pages: 1, eventsOverall: 9, postedEvents: [{ id: "a" }] }),
+      { status: 200 }
+    );
+  try {
+    await assert.rejects(
+      () => makeRaidHelper("k").listEvents("guild"),
+      /only 1 could be read/
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("listEvents follows pagination and deduplicates", async () => {
+  const { makeRaidHelper } = await import("../src/lib/raidhelper.mjs");
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    const page = Number(String(url).match(/page=(\d+)/)?.[1] ?? 1);
+    const body = page === 1
+      ? { pages: 2, eventsOverall: 3, postedEvents: [{ id: "a" }, { id: "b" }] }
+      // "b" repeated across pages must not be counted twice.
+      : { pages: 2, eventsOverall: 3, postedEvents: [{ id: "b" }, { id: "c" }] };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  try {
+    const events = await makeRaidHelper("k").listEvents("guild");
+    assert.deepEqual(events.map((e) => e.id), ["a", "b", "c"]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

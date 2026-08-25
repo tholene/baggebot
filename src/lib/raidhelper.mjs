@@ -17,6 +17,7 @@
 import { SafeError, sleep, scrub } from "./safe.mjs";
 
 const API = "https://raid-helper.xyz/api/v4";
+const MAX_EVENT_PAGES = 20;
 const USER_AGENT = "BaggeBot (guild raid signup reminders, v1.0)";
 
 /** First present, non-null value among several candidate key spellings. */
@@ -162,7 +163,13 @@ export function makeRaidHelper(apiKey) {
       return normaliseEvent(await request(`/events/${encodeURIComponent(eventId)}`));
     },
 
-    /** All events Raid-Helper knows about for this server. Needs an API key. */
+    /**
+     * All events Raid-Helper knows about for this server. Needs an API key.
+     *
+     * The response is paginated. Reading only the first page would silently
+     * truncate the calendar, and this list decides which raid gets bonked, so
+     * every page is fetched and the results deduplicated by event id.
+     */
     async listEvents(serverId) {
       if (!apiKey) {
         throw new SafeError(
@@ -170,27 +177,62 @@ export function makeRaidHelper(apiKey) {
             "run /apikey in Discord, or pass an explicit event with the `event:` option."
         );
       }
-      const body = await request(`/servers/${encodeURIComponent(serverId)}/events`);
-      const events = Array.isArray(body) ? body : pick(body, "postedEvents", "events");
-      if (!Array.isArray(events)) {
-        throw new SafeError("Raid-Helper returned an unexpected event list payload.");
+
+      const path = `/servers/${encodeURIComponent(serverId)}/events`;
+      const first = await request(path);
+      const collected = [];
+      const seen = new Set();
+
+      const absorb = (body) => {
+        const events = Array.isArray(body) ? body : pick(body, "postedEvents", "events");
+        if (!Array.isArray(events)) {
+          throw new SafeError("Raid-Helper returned an unexpected event list payload.");
+        }
+        for (const event of events) {
+          const id = String(pick(event, "id", "eventId", "event_id") ?? "");
+          if (!id || seen.has(id)) continue;
+          seen.add(id);
+          collected.push(event);
+        }
+      };
+
+      absorb(first);
+
+      const pages = Number(pick(first, "pages")) || 1;
+      // A bound, so a malformed `pages` cannot turn this into a request storm.
+      for (let page = 2; page <= Math.min(pages, MAX_EVENT_PAGES); page++) {
+        absorb(await request(`${path}?page=${page}`));
       }
-      return events;
+
+      const overall = Number(pick(first, "eventsOverall"));
+      if (Number.isFinite(overall) && collected.length < overall) {
+        // Say so rather than quietly working from a partial calendar.
+        throw new SafeError(
+          `Raid-Helper reports ${overall} events for this server but only ${collected.length} ` +
+            `could be read across ${pages} page(s). Refusing to guess which raid is next - ` +
+            `pass one explicitly with the \`event:\` option.`
+        );
+      }
+
+      return collected;
     },
 
     /**
      * The soonest event that has not started yet. Returns null when the calendar
      * is empty ahead of us, which is a normal state, not an error.
      */
-    async findNextEvent(serverId, nowSeconds) {
+    async findNextEvent(serverId, nowSeconds, channelIds = []) {
       const events = await this.listEvents(serverId);
       const upcoming = events
         .map((event) => ({
           id: String(pick(event, "id", "eventId", "event_id") ?? ""),
           title: String(pick(event, "title", "name") ?? "(untitled event)"),
+          channelId: String(pick(event, "channelId", "channelid", "channel_id") ?? ""),
           startTime: toUnixSeconds(pick(event, "startTime", "starttime", "start_time")),
         }))
         .filter((event) => event.id && event.startTime && event.startTime > nowSeconds)
+        // Guilds post things other than raids. Only the signup channel counts.
+        .filter((event) => channelIds.length === 0 || channelIds.includes(event.channelId))
         .sort((a, b) => a.startTime - b.startTime);
 
       if (upcoming.length === 0) return null;

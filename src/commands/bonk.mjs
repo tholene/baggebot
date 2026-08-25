@@ -67,14 +67,35 @@ async function resolveEvent(interaction, { raidHelper, config, nowSeconds }) {
           `Refusing to continue.`
       );
     }
+    // Applies to an explicitly named event too: pasting the wrong link is
+    // exactly the mistake this guard exists to catch.
+    if (
+      config.raidChannelIds.length > 0 &&
+      event.channelId &&
+      !config.raidChannelIds.includes(event.channelId)
+    ) {
+      throw new SafeError(
+        `That event is in <#${event.channelId}>, which is not a raid signup channel. ` +
+          `Only events in ${config.raidChannelIds.map((id) => `<#${id}>`).join(", ")} ` +
+          `can be bonked. Change RAID_CHANNEL_IDS if that is wrong.`
+      );
+    }
     return event;
   }
 
-  const event = await raidHelper.findNextEvent(config.guildId, nowSeconds);
+  const event = await raidHelper.findNextEvent(
+    config.guildId,
+    nowSeconds,
+    config.raidChannelIds
+  );
   if (!event) {
+    const where =
+      config.raidChannelIds.length > 0
+        ? ` in ${config.raidChannelIds.map((id) => `<#${id}>`).join(", ")}`
+        : "";
     throw new SafeError(
-      "Raid-Helper has no upcoming events for this server. If the raid is posted, " +
-        "pass it explicitly with the `event:` option."
+      `Raid-Helper has no upcoming events${where}. If the raid is posted, pass it ` +
+        "explicitly with the `event:` option."
     );
   }
   return event;

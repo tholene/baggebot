@@ -34,6 +34,9 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
   const raiderRoleId = envSnowflake("RAIDER_ROLE_ID", { required: requireBonkConfig });
   const officerRoleId = envSnowflake("OFFICER_ROLE_ID", { required: requireBonkConfig });
   const excludeRoleIds = envSnowflakeList("EXCLUDE_ROLE_IDS");
+  // Which channels raids are posted in. Guilds post other Raid-Helper events
+  // (roster sign-ups, alt lists) elsewhere, and those must never be bonked.
+  const raidChannelIds = envSnowflakeList("RAID_CHANNEL_IDS");
   // Accept either name: RAID_HELPER_TOKEN is what /apikey calls it, and
   // RAID_HELPER_API_KEY is what earlier versions of .env.example documented.
   const raidHelperApiKey = env("RAID_HELPER_TOKEN") || env("RAID_HELPER_API_KEY");
@@ -62,6 +65,7 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
     raiderRoleId,
     officerRoleId,
     excludeRoleIds,
+    raidChannelIds,
     raidHelperApiKey,
     maxDm,
     dmDelayMs,
