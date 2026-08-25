@@ -1,0 +1,7 @@
+Hey {user}! Ebri asked me to remind you that you haven't signed up for **{event}** yet.
+
+It starts {time_relative} ({time_absolute}).
+
+Sign up here: {link}
+
+*I'm a bot — Ebri sent me. Message her directly if you need anything, or if you'd rather not get these.*

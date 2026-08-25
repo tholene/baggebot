@@ -1,0 +1,58 @@
+# BaggeBot - systemd *user* service.
+#
+# This is the ALTERNATIVE to Docker. If you are using compose.yaml (recommended,
+# and what the README documents), you do not need this file at all - Docker's own
+# restart policy handles starting on boot. Use this only for running the bot
+# directly against a local Node install.
+#
+# Install:
+#   mkdir -p ~/.config/systemd/user
+#   cp baggebot.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now baggebot
+#
+# Then, so it keeps running when you are not logged in (and starts at boot):
+#   loginctl enable-linger tholene
+#
+# Logs:
+#   journalctl --user -u baggebot -f
+#
+# %h expands to the user's home directory, so this file has no absolute paths.
+# Node is resolved through fnm's "default" alias symlink rather than a pinned
+# version directory, so `fnm default <version>` keeps working without editing
+# this unit.
+
+[Unit]
+Description=BaggeBot - raid signup reminders for Discord
+Documentation=file:%h/Projects/BaggeBot/README.md
+After=network-online.target
+Wants=network-online.target
+
+# Do not spin forever if the config is broken - the bot exits non-zero on a bad
+# .env, and hammering Discord with a doomed login is worse than being down.
+# These belong in [Unit]; systemd ignores them under [Service].
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/Projects/BaggeBot
+ExecStart=%h/.local/share/fnm/aliases/default/bin/node %h/Projects/BaggeBot/src/bot.mjs
+
+# The gateway connection drops for all sorts of ordinary reasons. Come back.
+Restart=on-failure
+RestartSec=10
+
+Environment=NODE_ENV=production
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=baggebot
+
+# Modest hardening. The bot only needs to read its own directory and talk out.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=read-only
+ReadWritePaths=%h/Projects/BaggeBot/state
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,25 @@
+{
+  "name": "baggebot",
+  "version": "1.0.0",
+  "description": "Discord bot for a WoW guild: /bonk reminds raiders who have not signed up, plus one-shot Raid-Helper cleanup scripts.",
+  "main": "src/bot.mjs",
+  "scripts": {
+    "start": "node src/bot.mjs",
+    "test": "node --test test/*.test.mjs",
+    "check": "for f in $(find src scripts test -name \"*.mjs\"); do node --check \"$f\" || exit 1; done && echo \"all files parse\"",
+    "register": "node scripts/register-commands.mjs",
+    "inspect": "node scripts/inspect-event.mjs",
+    "scan": "node scripts/cleanup.mjs",
+    "cleanup": "node scripts/cleanup.mjs",
+    "react": "node scripts/react.mjs",
+    "purge": "node scripts/purge-channel.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.2.3"
+  },
+  "private": true
+}

@@ -1,0 +1,45 @@
+# Runs BaggeBot on this machine, restarting on crash and coming back on boot
+# (as long as the Docker daemon itself is enabled: `sudo systemctl enable --now docker`).
+#
+#   docker compose up -d --build      start it
+#   docker compose logs -f            watch it
+#   docker compose restart            after changing .env
+#   docker compose down               stop it
+#
+# One-shot scripts use the same image:
+#
+#   docker compose run --rm bot npm run register
+#   docker compose run --rm bot npm run inspect -- <eventId>
+#   docker compose run --rm bot npm run scan
+
+services:
+  bot:
+    build: .
+    image: baggebot:latest
+    container_name: baggebot
+
+    # Comes back after a crash and after a reboot, but stays down if you
+    # deliberately `docker compose down`.
+    restart: unless-stopped
+
+    env_file: .env
+    environment:
+      STATE_DIR: /app/state
+
+    volumes:
+      # Who has already been bonked. Must outlive the container, or a rebuild
+      # would silently re-DM everyone.
+      - ./state:/app/state
+      # Mounted rather than baked in, so editing the wording takes effect on the
+      # next /bonk without a rebuild or restart.
+      - ./bonk-message.txt:/app/bonk-message.txt:ro
+
+    # Forward SIGTERM properly so the gateway socket closes cleanly on stop.
+    init: true
+    stop_grace_period: 15s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

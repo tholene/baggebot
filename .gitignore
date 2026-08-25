@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Dependencies
+node_modules/
+
+# Logs / OS noise
+*.log
+npm-debug.log*
+.DS_Store
+
+# Bonk history — who has already been reminded, per event.
+# Local runtime state, not configuration. Losing it means people get
+# reminded twice, so back it up rather than committing it.
+state/*
+!state/.gitkeep
+
+# IDE
+.idea/

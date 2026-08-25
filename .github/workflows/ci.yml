@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # Catches syntax errors in files the test suite never imports -
+      # the one-shot scripts in particular.
+      - run: npm run check
+
+      - run: npm test
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The image is how this is deployed anywhere, so a broken Dockerfile
+      # should fail here rather than at deploy time.
+      - run: docker build -t baggebot:ci .
+
+      - name: Bot starts and reports missing config
+        run: |
+          set -o pipefail
+          # No .env, so this must exit non-zero with a readable message rather
+          # than a stack trace or a hang.
+          output=$(docker run --rm baggebot:ci 2>&1) && exit_code=0 || exit_code=$?
+          echo "$output"
+          test "$exit_code" -ne 0
+          echo "$output" | grep -q "ERROR:"

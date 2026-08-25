@@ -1,0 +1,14 @@
+# Secrets are injected at runtime via env_file, never baked into the image.
+.env
+.env.*
+
+.git
+.github
+.idea
+node_modules
+state
+test
+*.md
+Dockerfile
+compose.yaml
+baggebot.service
