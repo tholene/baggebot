@@ -45,6 +45,34 @@ export async function loadTemplate() {
   return text.trim();
 }
 
+/**
+ * Custom emoji only render from a bot's message when written as <:name:id>.
+ * The template is meant to be edited by officers, not programmers, so let them
+ * write :BONK: and resolve it here.
+ *
+ * Only names that actually exist in the guild are substituted, which is what
+ * keeps this from mangling Discord's own <t:1787855400:R> timestamp markup.
+ *
+ * @param guild a discord.js Guild, or null to disable resolution
+ */
+export function makeEmojiResolver(guild) {
+  if (!guild) return (text) => text;
+
+  const byName = new Map();
+  for (const emoji of guild.emojis.cache.values()) {
+    if (emoji.name && emoji.available !== false) {
+      byName.set(emoji.name.toLowerCase(), emoji);
+    }
+  }
+
+  return (text) =>
+    text.replace(/:([a-zA-Z0-9_~]{2,32}):/g, (whole, name) => {
+      const emoji = byName.get(name.toLowerCase());
+      if (!emoji) return whole; // unicode emoji, plain text, or a typo - leave it
+      return `<${emoji.animated ? "a" : ""}:${emoji.name}:${emoji.id}>`;
+    });
+}
+
 export function eventLink(guildId, channelId, eventId) {
   if (!channelId) return "";
   return `https://discord.com/channels/${guildId}/${channelId}/${eventId}`;
@@ -54,7 +82,7 @@ export function eventLink(guildId, channelId, eventId) {
  * Fill the template. Timestamps use Discord's <t:unix:F> / <t:unix:R> markup so
  * each recipient sees the raid time in their own timezone rather than ours.
  */
-export function renderMessage(template, { member, event, guildId }) {
+export function renderMessage(template, { member, event, guildId, resolveEmoji }) {
   const link = eventLink(guildId, event.channelId, event.id);
   const replacements = {
     "{user}": member.toString(),
@@ -69,7 +97,7 @@ export function renderMessage(template, { member, event, guildId }) {
   for (const [token, value] of Object.entries(replacements)) {
     out = out.split(token).join(value);
   }
-  return out;
+  return resolveEmoji ? resolveEmoji(out) : out;
 }
 
 /**
@@ -107,6 +135,7 @@ export async function sendBonks({
   template,
   config,
   state,
+  resolveEmoji,
   onProgress,
 }) {
   const sent = [];
@@ -123,7 +152,7 @@ export async function sendBonks({
     }
 
     try {
-      await member.send(renderMessage(template, { member, event, guildId }));
+      await member.send(renderMessage(template, { member, event, guildId, resolveEmoji }));
       // Persist before the next send: a crash here must not cause a re-bonk.
       await state.record(event.id, member.id, new Date().toISOString());
       sent.push(member);

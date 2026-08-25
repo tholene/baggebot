@@ -20,7 +20,7 @@ import {
 
 import { SafeError, isSnowflake, logErr } from "../lib/safe.mjs";
 import { fetchRoster, diffRoster } from "../lib/roster.mjs";
-import { loadTemplate, sendBonks, eventLink } from "../lib/bonk.mjs";
+import { loadTemplate, sendBonks, eventLink, makeEmojiResolver } from "../lib/bonk.mjs";
 
 /** How long the confirm button stays live. */
 const CONFIRM_WINDOW_MS = 5 * 60 * 1000;
@@ -286,6 +286,7 @@ export async function execute(interaction, context) {
   });
 
   const template = await loadTemplate();
+  const resolveEmoji = makeEmojiResolver(interaction.guild);
   const result = await sendBonks({
     members: diff.unsigned,
     event,
@@ -293,6 +294,7 @@ export async function execute(interaction, context) {
     template,
     config,
     state,
+    resolveEmoji,
     onProgress: async (done, total) => {
       await interaction.editReply({ content: `Sending DMs… ${done}/${total}` });
     },

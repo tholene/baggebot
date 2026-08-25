@@ -286,3 +286,53 @@ test("listEvents follows pagination and deduplicates", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+test("emoji shortcodes resolve without mangling timestamp markup", async () => {
+  const { makeEmojiResolver, renderMessage } = await import("../src/lib/bonk.mjs");
+
+  // Stand-in for a Guild: only BONK exists here.
+  const guild = {
+    emojis: {
+      cache: new Map([
+        ["1", { name: "BONK", id: "1470388292447895730", available: true, animated: false }],
+        ["2", { name: "spin", id: "222", available: true, animated: true }],
+        ["3", { name: "gone", id: "333", available: false, animated: false }],
+      ]).values
+        ? { values: () => [
+            { name: "BONK", id: "1470388292447895730", available: true, animated: false },
+            { name: "spin", id: "222", available: true, animated: true },
+            { name: "gone", id: "333", available: false, animated: false },
+          ] }
+        : null,
+    },
+  };
+  const resolveEmoji = makeEmojiResolver(guild);
+
+  assert.equal(resolveEmoji("hi :BONK:"), "hi <:BONK:1470388292447895730>");
+  assert.equal(resolveEmoji("case :bonk: insensitive"), "case <:BONK:1470388292447895730> insensitive");
+  assert.equal(resolveEmoji(":spin:"), "<a:spin:222>", "animated emoji need the a: prefix");
+
+  // The important one: Discord's own markup must survive untouched.
+  assert.equal(resolveEmoji("<t:1787855400:R>"), "<t:1787855400:R>");
+  assert.equal(resolveEmoji("<t:1787855400:F> and :BONK:"), "<t:1787855400:F> and <:BONK:1470388292447895730>");
+
+  // Unknown names, unavailable emoji and unicode are left alone.
+  assert.equal(resolveEmoji(":notanemoji:"), ":notanemoji:");
+  assert.equal(resolveEmoji(":gone:"), ":gone:");
+  assert.equal(resolveEmoji("👍"), "👍");
+
+  // And it composes with placeholder substitution in the real path.
+  const out = renderMessage("{event} :BONK: starts {time_relative}", {
+    member: { id: "1".repeat(17), displayName: "X", toString: () => "<@1>" },
+    event: { id: "1", title: "Raid", channelId: "2", startTime: 1787855400 },
+    guildId: "3",
+    resolveEmoji,
+  });
+  assert.ok(out.includes("<:BONK:1470388292447895730>"));
+  assert.ok(out.includes("<t:1787855400:R>"), "timestamp survived emoji resolution");
+});
+
+test("no guild means shortcodes pass through untouched", async () => {
+  const { makeEmojiResolver } = await import("../src/lib/bonk.mjs");
+  assert.equal(makeEmojiResolver(null)(":BONK:"), ":BONK:");
+});
