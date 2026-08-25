@@ -46,24 +46,17 @@ export async function fetchRoster(guild, config) {
 }
 
 /**
- * Split the roster against an event's signups and the bonk history.
+ * Split the roster against an event's signups.
  *
  * `signedUserIds` counts every signup status - absence, tentative and bench
  * included. Those people answered; chasing them would be the bug.
  */
-export function diffRoster({ members, signedUserIds, alreadyBonked }) {
-  const unsigned = [];
-  const skipped = [];
-
-  for (const member of members) {
-    if (signedUserIds.has(member.id)) continue;
-    (alreadyBonked.has(member.id) ? skipped : unsigned).push(member);
-  }
+export function diffRoster({ members, signedUserIds }) {
+  const unsigned = members.filter((member) => !signedUserIds.has(member.id));
 
   return {
     unsigned,
-    skipped,
-    signedCount: members.length - unsigned.length - skipped.length,
+    signedCount: members.length - unsigned.length,
     rosterSize: members.length,
   };
 }

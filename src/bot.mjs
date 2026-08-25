@@ -22,7 +22,6 @@ import { Client, Events, GatewayIntentBits, MessageFlags } from "discord.js";
 import { SafeError, log, logErr } from "./lib/safe.mjs";
 import { loadConfig } from "./lib/config.mjs";
 import { makeRaidHelper } from "./lib/raidhelper.mjs";
-import { BonkState } from "./lib/state.mjs";
 import { explainLoginError } from "./lib/discord-errors.mjs";
 import * as bonkCommand from "./commands/bonk.mjs";
 
@@ -60,10 +59,6 @@ async function replyWithError(interaction, error) {
 async function main() {
   const config = loadConfig();
 
-  const state = await BonkState.load();
-  const pruned = await state.prune(Date.now());
-  if (pruned > 0) log(`Pruned bonk history for ${pruned} event(s) older than 30 days.`);
-
   if (config.raidChannelIds.length === 0) {
     log(
       "NOTE: RAID_CHANNEL_IDS is not set, so /bonk will consider Raid-Helper events " +
@@ -79,7 +74,7 @@ async function main() {
   }
 
   const raidHelper = makeRaidHelper(config.raidHelperApiKey);
-  const context = { config, raidHelper, state };
+  const context = { config, raidHelper };
 
   const client = new Client({
     intents: [
@@ -93,7 +88,7 @@ async function main() {
   client.once(Events.ClientReady, (ready) => {
     log(`Logged in as ${ready.user.tag} (id ${ready.user.id})`);
     log(`Serving guild ${config.guildId}; raider role ${config.raiderRoleId}`);
-    log(`Officer role ${config.officerRoleId}; max ${config.maxDm} DMs per run`);
+    log(`Officer role ${config.officerRoleId}; ${config.dmDelayMs}ms between DMs`);
     log(
       `Raid channels: ${
         config.raidChannelIds.length ? config.raidChannelIds.join(", ") : "(all - unfiltered)"

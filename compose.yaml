@@ -23,13 +23,8 @@ services:
     restart: unless-stopped
 
     env_file: .env
-    environment:
-      STATE_DIR: /app/state
 
     volumes:
-      # Who has already been bonked. Must outlive the container, or a rebuild
-      # would silently re-DM everyone.
-      - ./state:/app/state
       # Mounted rather than baked in, so editing the wording takes effect on the
       # next /bonk without a rebuild or restart.
       - ./bonk-message.txt:/app/bonk-message.txt:ro

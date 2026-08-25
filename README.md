@@ -33,7 +33,6 @@ scripts/            one-shot tools, run by hand
   purge-channel.mjs       delete every message in one channel
   react.mjs               add or remove one reaction
 test/               runs without network or Discord
-state/              bonk history (gitignored)
 ```
 
 ---
@@ -103,7 +102,6 @@ Roles → right-click a role → **Copy Role ID**.
 | `EXCLUDE_ROLE_IDS` | Optional, comma-separated. Trials, socials, alt-only members. |
 | `RAID_CHANNEL_IDS` | Comma-separated channels raids are posted in. Events elsewhere are ignored. |
 | `RAID_HELPER_TOKEN` | From `/apikey`. Needed for auto-picking the next raid. |
-| `MAX_DM` | Refuse to send more than this many DMs in one run. Default 40. |
 | `DM_DELAY_MS` | Milliseconds between DMs. Default 2500, minimum 1000. |
 
 ### 4. Register the command and start
@@ -137,6 +135,12 @@ scheduled sooner would be picked and its non-signers DMed. The filter applies to
 an explicitly passed `event:` too, since pasting the wrong link is exactly the
 mistake worth catching.
 
+`/bonk` keeps **no memory between runs**. Every invocation DMs everyone currently
+unsigned. That makes a second reminder closer to raid time trivial — just run it
+again — but it also means running it twice in quick succession reminds the same
+people twice. The preview and the confirm button are what stand between you and
+that.
+
 ## The DM
 
 `bonk-message.txt`, **re-read on every invocation** — edit the wording and the
@@ -150,6 +154,10 @@ next `/bonk` uses it, no restart needed.
 | `{time_absolute}` | `<t:…:F>` — the raid time in *their* timezone |
 | `{time_relative}` | `<t:…:R>` — "in 2 days" |
 | `{link}` | Jump link to the event post |
+
+Custom emoji work as plain shortcodes — write `:BONK:` and it is resolved against
+the guild's emoji list when the DM is sent. Only names that actually exist are
+substituted, so Discord's own `<t:…:R>` timestamp markup is left alone.
 
 ## Running it
 
@@ -176,9 +184,8 @@ provided the Docker daemon itself starts on boot:
 sudo systemctl enable --now docker
 ```
 
-Two things are mounted rather than baked into the image: `state/`, so the bonk
-history survives a rebuild, and `bonk-message.txt`, so editing the wording takes
-effect on the next `/bonk` without rebuilding or restarting.
+`bonk-message.txt` is mounted rather than baked into the image, so editing the
+wording takes effect on the next `/bonk` without rebuilding or restarting.
 
 One-shot scripts use the same image:
 
@@ -221,20 +228,9 @@ is an offline bot.
 A note on the serverless route, since it looks tempting: rewriting `/bonk` as an
 HTTP interactions endpoint on Cloudflare Workers would need no always-on process
 at all, but the free plan caps you at **50 external subrequests per invocation**
-and each DM costs two Discord calls. That breaks at roughly 24 recipients, below
-the default `MAX_DM` of 40. The paid plan costs more than Fly and needs a real
-rewrite. Not worth it at this scale.
-
-## Who has already been bonked
-
-`state/bonked.json` records who was DMed for which event, written after **every
-single send** rather than at the end — if the process dies mid-run, the people
-already reminded must stay recorded. Re-running `/bonk` as stragglers trickle in
-therefore never DMs the same person twice. Events older than 30 days are pruned
-at startup.
-
-The file is gitignored. Losing it means people get reminded twice, so back it up
-rather than committing it.
+and each DM costs two Discord calls. That caps a single run at roughly 24
+recipients, under a 40-person roster. The paid plan costs more than Fly and needs
+a real rewrite. Not worth it at this scale.
 
 ## Safety model
 
@@ -244,12 +240,11 @@ Mass-DMing is precisely what Discord's spam rules target, so:
 * **Officer-gated**, checked server-side on every use. `default_member_permissions`
   hides it in the UI, but that can be overridden by admins, so it is not the gate.
 * **One guild.** The event's server ID is verified against `GUILD_ID`.
-* **Capped** at `MAX_DM`. Over it, the bot refuses and names the number needed.
 * **Paced**, sequential, never parallel. Bulk-opening DM channels fast is the
   flagged pattern. The bot refuses to start with `DM_DELAY_MS` under 1000.
 * **Final per-recipient gate.** Immediately before each DM: still on the roster,
-  still unsigned, not excluded, not already reminded. The preview may be minutes
-  old by then.
+  still unsigned, not excluded. The preview may be minutes old by then, and
+  someone may have signed up in between.
 * **Fails closed on a missing signup list.** If Raid-Helper's response shape
   changes and the signups can't be found, it throws — treating that as "nobody
   signed up" would DM the entire roster.

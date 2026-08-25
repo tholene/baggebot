@@ -130,16 +130,6 @@ function buildPreviewEmbed({ event, diff, config, guildId }) {
     });
   }
 
-  if (diff.skipped.length > 0) {
-    embed.addFields({
-      name: "Skipped (already reminded for this event)",
-      value: diff.skipped
-        .map((member) => member.displayName)
-        .join(", ")
-        .slice(0, 1000),
-    });
-  }
-
   embed.setFooter({ text: `Event ${event.id} · ${config.dmDelayMs}ms between DMs` });
   return embed;
 }
@@ -180,7 +170,7 @@ function buildResultEmbed({ event, result }) {
 }
 
 export async function execute(interaction, context) {
-  const { config, raidHelper, state } = context;
+  const { config, raidHelper } = context;
 
   if (!interaction.inGuild() || interaction.guildId !== config.guildId) {
     await interaction.reply({
@@ -211,11 +201,7 @@ export async function execute(interaction, context) {
   }
 
   const { members } = await fetchRoster(interaction.guild, config);
-  const diff = diffRoster({
-    members,
-    signedUserIds: event.signedUserIds,
-    alreadyBonked: state.bonkedFor(event.id),
-  });
+  const diff = diffRoster({ members, signedUserIds: event.signedUserIds });
 
   const embed = buildPreviewEmbed({
     event,
@@ -231,14 +217,6 @@ export async function execute(interaction, context) {
     );
     await interaction.editReply({ embeds: [embed] });
     return;
-  }
-
-  if (diff.unsigned.length > config.maxDm) {
-    throw new SafeError(
-      `${diff.unsigned.length} people are unsigned, which is over the MAX_DM cap of ` +
-        `${config.maxDm}. That is a lot of DMs to send at once — if it is genuinely ` +
-        `intended, set MAX_DM=${diff.unsigned.length} in .env and restart the bot.`
-    );
   }
 
   const confirmId = `bonk:confirm:${interaction.id}`;
@@ -293,7 +271,6 @@ export async function execute(interaction, context) {
     guildId: interaction.guildId,
     template,
     config,
-    state,
     resolveEmoji,
     onProgress: async (done, total) => {
       await interaction.editReply({ content: `Sending DMs… ${done}/${total}` });

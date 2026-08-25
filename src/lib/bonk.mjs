@@ -105,7 +105,7 @@ export function renderMessage(template, { member, event, guildId, resolveEmoji }
  * preview the officer approved may be minutes old by the time we reach the end
  * of the list; someone may have signed up or left in the meantime.
  */
-function assertBonkable(member, { event, config, state }) {
+function assertBonkable(member, { event, config }) {
   if (member.user.bot) {
     throw new SafeError(`${member.displayName} is a bot.`);
   }
@@ -117,9 +117,6 @@ function assertBonkable(member, { event, config, state }) {
   }
   if (event.signedUserIds.has(member.id)) {
     throw new SafeError(`${member.displayName} has signed up since the preview.`);
-  }
-  if (state.wasBonked(event.id, member.id)) {
-    throw new SafeError(`${member.displayName} was already reminded for this event.`);
   }
 }
 
@@ -134,7 +131,6 @@ export async function sendBonks({
   guildId,
   template,
   config,
-  state,
   resolveEmoji,
   onProgress,
 }) {
@@ -144,7 +140,7 @@ export async function sendBonks({
 
   for (const [index, member] of members.entries()) {
     try {
-      assertBonkable(member, { event, config, state });
+      assertBonkable(member, { event, config });
     } catch (error) {
       // Not a failure - the world changed since the preview. Note it and move on.
       skipped.push({ member, reason: error.message });
@@ -153,8 +149,6 @@ export async function sendBonks({
 
     try {
       await member.send(renderMessage(template, { member, event, guildId, resolveEmoji }));
-      // Persist before the next send: a crash here must not cause a re-bonk.
-      await state.record(event.id, member.id, new Date().toISOString());
       sent.push(member);
       log(`[${index + 1}/${members.length}] bonked ${member.displayName} (${member.id})`);
     } catch (error) {

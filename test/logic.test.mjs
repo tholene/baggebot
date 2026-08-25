@@ -1,24 +1,18 @@
 /**
  * Tests for the parts of /bonk that can be checked without Discord.
  *
- * The cases that matter most are the ones where a bug would DM real people:
- * a missing signup list must throw rather than read as "nobody signed up", and
- * the bonk history must survive a restart or everyone gets reminded twice.
+ * The case that matters most is the one where a bug would DM real people: a
+ * missing signup list must throw rather than read as "nobody signed up".
  *
  *   npm test
  */
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile, rm, writeFile } from "node:fs/promises";
-
 import { normaliseEvent } from "../src/lib/raidhelper.mjs";
 import { renderMessage, loadTemplate, eventLink } from "../src/lib/bonk.mjs";
 import { diffRoster } from "../src/lib/roster.mjs";
-import { BonkState } from "../src/lib/state.mjs";
 import { envSnowflakeList, envInt, SafeError } from "../src/lib/safe.mjs";
-
-const STATE = new URL("../state/bonked.json", import.meta.url).pathname;
 
 const fakeMember = (id, name) => ({
   id,
@@ -116,21 +110,16 @@ test("the real bonk-message.txt renders cleanly and fits in a DM", async () => {
   assert.ok(out.length < 2000, "DM exceeds Discord's 2000 character limit");
 });
 
-test("diffRoster splits signed, unsigned and already-bonked", () => {
+test("diffRoster splits signed from unsigned", () => {
   const members = [fakeMember("1", "A"), fakeMember("2", "B"), fakeMember("3", "C"), fakeMember("4", "D")];
-  const diff = diffRoster({
-    members, signedUserIds: new Set(["1"]), alreadyBonked: new Set(["2"]),
-  });
+  const diff = diffRoster({ members, signedUserIds: new Set(["1", "2"]) });
   assert.deepEqual(diff.unsigned.map((m) => m.id), ["3", "4"]);
-  assert.deepEqual(diff.skipped.map((m) => m.id), ["2"]);
-  assert.equal(diff.signedCount, 1);
+  assert.equal(diff.signedCount, 2);
   assert.equal(diff.rosterSize, 4);
 });
 
 test("diffRoster reports nothing to do when everyone answered", () => {
-  const diff = diffRoster({
-    members: [fakeMember("1", "A")], signedUserIds: new Set(["1"]), alreadyBonked: new Set(),
-  });
+  const diff = diffRoster({ members: [fakeMember("1", "A")], signedUserIds: new Set(["1"]) });
   assert.equal(diff.unsigned.length, 0);
 });
 
@@ -152,45 +141,6 @@ test("envInt rejects zero and non-numbers", () => {
   process.env.TEST_INT = "";
   assert.equal(envInt("TEST_INT", 5), 5);
   delete process.env.TEST_INT;
-});
-
-test("bonk history survives a restart and scopes per event", async (t) => {
-  t.after(() => rm(STATE, { force: true }));
-  await rm(STATE, { force: true });
-
-  const first = await BonkState.load();
-  assert.equal(first.wasBonked("e1", "u1"), false, "fresh start should be empty");
-
-  await first.record("e1", "u1", new Date().toISOString());
-  const onDisk = JSON.parse(await readFile(STATE, "utf8"));
-  assert.ok(onDisk.e1?.u1, "must be written before the next DM, not at the end of the run");
-
-  // The case that matters: the process dies mid-send and comes back.
-  const reloaded = await BonkState.load();
-  assert.equal(reloaded.wasBonked("e1", "u1"), true, "would re-bonk someone after a crash");
-  assert.equal(reloaded.wasBonked("e2", "u1"), false, "history must not leak across events");
-});
-
-test("prune drops stale events but keeps recent ones", async (t) => {
-  t.after(() => rm(STATE, { force: true }));
-  await rm(STATE, { force: true });
-
-  const state = await BonkState.load();
-  await state.record("ancient", "u9", new Date(Date.now() - 60 * 24 * 3600 * 1000).toISOString());
-  await state.record("fresh", "u9", new Date().toISOString());
-
-  assert.ok((await state.prune(Date.now())) >= 1, "did not prune a 60-day-old event");
-
-  const after = await BonkState.load();
-  assert.equal(after.wasBonked("ancient", "u9"), false);
-  assert.equal(after.wasBonked("fresh", "u9"), true, "pruned an event that is still relevant");
-});
-
-test("a corrupt state file warns but does not take the bot down", async (t) => {
-  t.after(() => rm(STATE, { force: true }));
-  await writeFile(STATE, "{ this is not json", "utf8");
-  const state = await BonkState.load();
-  assert.equal(state.wasBonked("e1", "u1"), false);
 });
 
 test("login failures explain which switch to flip", async () => {

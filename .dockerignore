@@ -6,7 +6,6 @@
 .github
 .idea
 node_modules
-state
 test
 *.md
 Dockerfile

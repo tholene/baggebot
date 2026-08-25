@@ -18,8 +18,6 @@ FROM node:24-alpine
 WORKDIR /app
 
 ENV NODE_ENV=production
-# Written to a mounted volume, not the image layer - see compose.yaml.
-ENV STATE_DIR=/app/state
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json ./
@@ -27,9 +25,6 @@ COPY src ./src
 COPY scripts ./scripts
 COPY bonk-message.txt ./
 
-# The `node` user ships with the official image as uid 1000, which matches a
-# typical Linux desktop account, so a bind-mounted ./state stays writable.
-RUN mkdir -p /app/state && chown -R node:node /app/state
 USER node
 
 # The bot traps SIGTERM and closes the gateway socket cleanly; tini (via

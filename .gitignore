@@ -11,11 +11,5 @@ node_modules/
 npm-debug.log*
 .DS_Store
 
-# Bonk history — who has already been reminded, per event.
-# Local runtime state, not configuration. Losing it means people get
-# reminded twice, so back it up rather than committing it.
-state/*
-!state/.gitkeep
-
 # IDE
 .idea/

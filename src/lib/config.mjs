@@ -15,7 +15,6 @@ import {
   envSnowflakeList,
 } from "./safe.mjs";
 
-const DEFAULT_MAX_DM = 40;
 const DEFAULT_DM_DELAY_MS = 2500;
 
 /** Below this, pacing stops being pacing. */
@@ -41,7 +40,6 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
   // RAID_HELPER_API_KEY is what earlier versions of .env.example documented.
   const raidHelperApiKey = env("RAID_HELPER_TOKEN") || env("RAID_HELPER_API_KEY");
 
-  const maxDm = envInt("MAX_DM", DEFAULT_MAX_DM);
   const dmDelayMs = envInt("DM_DELAY_MS", DEFAULT_DM_DELAY_MS);
 
   if (dmDelayMs < MIN_DM_DELAY_MS) {
@@ -67,7 +65,6 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
     excludeRoleIds,
     raidChannelIds,
     raidHelperApiKey,
-    maxDm,
     dmDelayMs,
   };
 }
