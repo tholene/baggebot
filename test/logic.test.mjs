@@ -192,3 +192,20 @@ test("a corrupt state file warns but does not take the bot down", async (t) => {
   const state = await BonkState.load();
   assert.equal(state.wasBonked("e1", "u1"), false);
 });
+
+test("login failures explain which switch to flip", async () => {
+  const { explainLoginError } = await import("../src/lib/discord-errors.mjs");
+
+  const intents = explainLoginError(new Error("Used disallowed intents"));
+  assert.ok(intents instanceof SafeError);
+  assert.match(intents.message, /Server Members Intent/);
+
+  const token = explainLoginError(new Error("An invalid token was provided."));
+  assert.ok(token instanceof SafeError);
+  assert.match(token.message, /DISCORD_BOT_TOKEN/);
+
+  // Anything unrecognised must pass through untouched rather than be dressed up
+  // as an explanation we do not actually have.
+  const unknown = new Error("something else entirely");
+  assert.equal(explainLoginError(unknown), unknown);
+});

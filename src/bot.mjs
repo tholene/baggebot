@@ -23,6 +23,7 @@ import { SafeError, log, logErr } from "./lib/safe.mjs";
 import { loadConfig } from "./lib/config.mjs";
 import { makeRaidHelper } from "./lib/raidhelper.mjs";
 import { BonkState } from "./lib/state.mjs";
+import { explainLoginError } from "./lib/discord-errors.mjs";
 import * as bonkCommand from "./commands/bonk.mjs";
 
 const commands = new Map([[bonkCommand.data.name, bonkCommand]]);
@@ -117,7 +118,13 @@ async function main() {
     });
   }
 
-  await client.login(config.token);
+  try {
+    await client.login(config.token);
+  } catch (error) {
+    // A forgotten portal toggle is the most likely first-run failure, and
+    // Discord's own wording does not say which switch to flip.
+    throw explainLoginError(error);
+  }
 }
 
 main().catch((error) => {
