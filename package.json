@@ -15,7 +15,8 @@
     "scan": "node scripts/cleanup.mjs",
     "cleanup": "node scripts/cleanup.mjs",
     "react": "node scripts/react.mjs",
-    "purge": "node scripts/purge-channel.mjs"
+    "purge": "node scripts/purge-channel.mjs",
+    "activity": "node scripts/activity-export.mjs"
   },
   "engines": {
     "node": ">=18"
