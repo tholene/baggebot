@@ -202,3 +202,48 @@ export async function sendBonks({
 
   return { sent, skipped, failures };
 }
+
+/** What the preview says when there is nobody left to chase. */
+const ALL_CLEAR = "Everyone on the roster has answered. Nothing to do.";
+
+/**
+ * Extra lines shown only to Ebri. She is the one who does the chasing, so a
+ * full roster is her result, not the bot's.
+ */
+const EBRI_ALL_CLEAR_EXTRAS = [
+  "You can relax, Ebri! ✨",
+  "Nobody to bonk. Go have a coffee, Ebri. ☕",
+  "Full house, Ebri. The hammer stays on the shelf tonight. 🔨",
+  "Ebri, the roster answered before you even had to ask. Nice work.",
+  "Zero stragglers. Ebri, you have trained them well. 🫡",
+  "Everyone signed. Ebri, this is what victory looks like. 🏆",
+  "No bonks needed, Ebri — put your feet up. 🛋️",
+];
+
+/**
+ * Is this the officer the DM template is signed by?
+ *
+ * EBRI_USER_ID is the reliable answer; the name check is only so the feature
+ * still works on a config that predates it. Names are not identity anywhere
+ * that matters - this decides which cheerful sentence to print, nothing else.
+ */
+export function isEbri(user, config) {
+  if (!user) return false;
+  if (config?.ebriUserId) return user.id === config.ebriUserId;
+  return [user.username, user.globalName, user.displayName].some(
+    (name) => typeof name === "string" && name.toLowerCase().startsWith("ebri")
+  );
+}
+
+/**
+ * The all-clear line, with a bit of praise when Ebri is the one reading it.
+ *
+ * @param pick  injectable so the test does not have to stub Math.random.
+ */
+export function allClearMessage({ user, config, pick = Math.random }) {
+  if (!isEbri(user, config)) return ALL_CLEAR;
+  const extra =
+    EBRI_ALL_CLEAR_EXTRAS[Math.floor(pick() * EBRI_ALL_CLEAR_EXTRAS.length)] ??
+    EBRI_ALL_CLEAR_EXTRAS[0];
+  return `${ALL_CLEAR}\n${extra}`;
+}

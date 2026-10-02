@@ -11,16 +11,23 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  ComponentType,
   EmbedBuilder,
   MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
 } from "discord.js";
 
-import { SafeError, isSnowflake, logErr } from "../lib/safe.mjs";
+import { SafeError, logErr } from "../lib/safe.mjs";
 import { fetchRoster, diffRoster } from "../lib/roster.mjs";
-import { loadTemplate, sendBonks, eventLink, makeEmojiResolver } from "../lib/bonk.mjs";
+import {
+  loadTemplate,
+  sendBonks,
+  eventLink,
+  makeEmojiResolver,
+  allClearMessage,
+} from "../lib/bonk.mjs";
 
 /** How long the confirm button stays live. */
 const CONFIRM_WINDOW_MS = 5 * 60 * 1000;
@@ -28,77 +35,87 @@ const CONFIRM_WINDOW_MS = 5 * 60 * 1000;
 /** Names shown in the preview before we truncate the list. */
 const PREVIEW_NAME_LIMIT = 40;
 
+/** Discord's hard cap on the number of options in a select menu. */
+const MAX_CHOICES = 25;
+
 export const data = new SlashCommandBuilder()
   .setName("bonk")
   .setDescription("DM everyone on the raid roster who hasn't signed up yet")
-  .addStringOption((option) =>
-    option
-      .setName("event")
-      .setDescription("Raid-Helper event ID or message link (default: the next raid)")
-      .setRequired(false)
-  )
-  // UI-level hiding only. The real gate is the officer role check below;
-  // default_member_permissions can be overridden by server admins.
+  // No options at all: the raid is chosen from the picker in the preview, so
+  // there is nothing to type. Officers do this on phones.
+  //
+  // setDefaultMemberPermissions is UI-level hiding only. The real gate is the
+  // officer role check below; admins can override the permission.
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .setDMPermission(false);
 
-/** Accepts a raw event id or a full Discord message link. */
-function parseEventOption(raw) {
-  const value = raw.trim();
-  if (isSnowflake(value)) return value;
-
-  const link = value.match(/channels\/\d{17,20}\/\d{17,20}\/(\d{17,20})/);
-  if (link) return link[1];
-
-  throw new SafeError(
-    "That doesn't look like an event ID or a message link. Right-click the raid " +
-      "post and choose Copy Message ID (or Copy Message Link)."
-  );
-}
-
-async function resolveEvent(interaction, { raidHelper, config, nowSeconds }) {
-  const option = interaction.options.getString("event");
-
-  if (option) {
-    const event = await raidHelper.getEvent(parseEventOption(option));
-    if (event.serverId && event.serverId !== config.guildId) {
-      throw new SafeError(
-        `That event belongs to a different Discord server (${event.serverId}). ` +
-          `Refusing to continue.`
-      );
-    }
-    // Applies to an explicitly named event too: pasting the wrong link is
-    // exactly the mistake this guard exists to catch.
-    if (
-      config.raidChannelIds.length > 0 &&
-      event.channelId &&
-      !config.raidChannelIds.includes(event.channelId)
-    ) {
-      throw new SafeError(
-        `That event is in <#${event.channelId}>, which is not a raid signup channel. ` +
-          `Only events in ${config.raidChannelIds.map((id) => `<#${id}>`).join(", ")} ` +
-          `can be bonked. Change RAID_CHANNEL_IDS if that is wrong.`
-      );
-    }
-    return event;
-  }
-
-  const event = await raidHelper.findNextEvent(
+/**
+ * The upcoming raids, and the full first one.
+ *
+ * One calendar read serves both: the list endpoint returns summaries, which is
+ * everything the picker needs, but not signups - so the raid actually being
+ * previewed is re-fetched in full.
+ */
+async function loadRaids({ raidHelper, config, nowSeconds }) {
+  const choices = await raidHelper.listUpcomingEvents(
     config.guildId,
     nowSeconds,
-    config.raidChannelIds
+    config.raidChannelIds,
+    MAX_CHOICES
   );
-  if (!event) {
+
+  if (choices.length === 0) {
     const where =
       config.raidChannelIds.length > 0
         ? ` in ${config.raidChannelIds.map((id) => `<#${id}>`).join(", ")}`
         : "";
     throw new SafeError(
-      `Raid-Helper has no upcoming events${where}. If the raid is posted, pass it ` +
-        "explicitly with the `event:` option."
+      `Raid-Helper has no upcoming events${where}, so there is nothing to bonk for. ` +
+        `If the raid is posted, check it is in the right channel and has not already started.`
     );
   }
-  return event;
+
+  return { choices, event: await raidHelper.getEvent(choices[0].id) };
+}
+
+/**
+ * Start time for a select-menu option. Components render plain text only, so
+ * Discord's <t:...> stamps do not work here and the zone has to be spelled out.
+ */
+function formatChoiceTime(startTime) {
+  if (!startTime) return "time unknown";
+  return `${new Intl.DateTimeFormat("en-GB", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(startTime * 1000))} UTC`;
+}
+
+/**
+ * The raid picker, with the current event selected.
+ *
+ * Ebri does this on a phone, where copying an event ID out of a raid post and
+ * back into a slash command is genuinely painful. The list is the whole point:
+ * the next raid is already chosen, and switching is one tap.
+ */
+function buildChoiceRow({ choices, event, selectId }) {
+  const options = choices.map((choice) =>
+    new StringSelectMenuOptionBuilder()
+      .setValue(choice.id)
+      .setLabel(choice.title.slice(0, 100))
+      .setDescription(formatChoiceTime(choice.startTime).slice(0, 100))
+      .setDefault(choice.id === event.id)
+  );
+
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(selectId)
+      .setPlaceholder(event.title.slice(0, 150))
+      .addOptions(options)
+  );
 }
 
 function buildPreviewEmbed({ event, diff, config, guildId }) {
@@ -192,69 +209,106 @@ export async function execute(interaction, context) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const nowSeconds = Math.floor(Date.now() / 1000);
-  const event = await resolveEvent(interaction, { raidHelper, config, nowSeconds });
+  const { choices, event: firstEvent } = await loadRaids({ raidHelper, config, nowSeconds });
+  let event = firstEvent;
 
+  // The list only offers raids that have not started, so this should not fire.
+  // It is here for the gap between reading the calendar and reading the event.
   if (event.startTime && event.startTime < nowSeconds) {
     throw new SafeError(
       `"${event.title}" already started. Reminding people now would just be rude.`
     );
   }
 
+  // The roster is a property of the guild, not of the raid, so it survives the
+  // officer switching events in the picker below.
   const { members } = await fetchRoster(interaction.guild, config);
-  const diff = diffRoster({ members, signedUserIds: event.signedUserIds });
 
-  const embed = buildPreviewEmbed({
-    event,
-    diff,
-    config,
-    guildId: interaction.guildId,
-  });
-
-  if (diff.unsigned.length === 0) {
-    embed.setDescription(
-      (embed.data.description ? `${embed.data.description}\n\n` : "") +
-        "Everyone on the roster has answered. Nothing to do."
-    );
-    await interaction.editReply({ embeds: [embed] });
-    return;
-  }
-
+  const selectId = `bonk:event:${interaction.id}`;
   const confirmId = `bonk:confirm:${interaction.id}`;
   const cancelId = `bonk:cancel:${interaction.id}`;
 
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(confirmId)
-      .setLabel(`Send ${diff.unsigned.length} bonk${diff.unsigned.length === 1 ? "" : "s"}`)
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(cancelId)
-      .setLabel("Cancel")
-      .setStyle(ButtonStyle.Secondary)
-  );
+  // The whole preview-and-choose session shares one window. Switching raids is
+  // not a way to keep a confirm button alive indefinitely.
+  const deadline = Date.now() + CONFIRM_WINDOW_MS;
 
-  const preview = await interaction.editReply({ embeds: [embed], components: [row] });
-
+  let diff;
   let click;
-  try {
-    click = await preview.awaitMessageComponent({
-      componentType: ComponentType.Button,
-      // Only the officer who ran the command may confirm it.
-      filter: (button) => button.user.id === interaction.user.id,
-      time: CONFIRM_WINDOW_MS,
-    });
-  } catch {
-    await interaction.editReply({
-      content: "Timed out — nothing was sent.",
-      embeds: [embed],
-      components: [],
-    });
-    return;
-  }
 
-  if (click.customId === cancelId) {
-    await click.update({ content: "Cancelled. Nothing was sent.", embeds: [], components: [] });
-    return;
+  while (true) {
+    diff = diffRoster({ members, signedUserIds: event.signedUserIds });
+
+    const embed = buildPreviewEmbed({
+      event,
+      diff,
+      config,
+      guildId: interaction.guildId,
+    });
+
+    const components = [];
+    if (choices.length > 1) components.push(buildChoiceRow({ choices, event, selectId }));
+
+    if (diff.unsigned.length === 0) {
+      embed.setDescription(
+        (embed.data.description ? `${embed.data.description}\n\n` : "") +
+          allClearMessage({ user: interaction.user, config })
+      );
+    } else {
+      components.push(
+        new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(confirmId)
+            .setLabel(
+              `Send ${diff.unsigned.length} bonk${diff.unsigned.length === 1 ? "" : "s"}`
+            )
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId(cancelId)
+            .setLabel("Cancel")
+            .setStyle(ButtonStyle.Secondary)
+        )
+      );
+    }
+
+    const preview = await interaction.editReply({ embeds: [embed], components });
+
+    // Nothing to send and nothing to pick from: this is the final answer.
+    if (components.length === 0) return;
+
+    const remaining = deadline - Date.now();
+    try {
+      if (remaining <= 0) throw new Error("window closed");
+      click = await preview.awaitMessageComponent({
+        // Only the officer who ran the command may confirm it.
+        filter: (component) => component.user.id === interaction.user.id,
+        time: remaining,
+      });
+    } catch {
+      await interaction.editReply({
+        content: "Timed out — nothing was sent.",
+        embeds: [embed],
+        components: [],
+      });
+      return;
+    }
+
+    if (click.customId === selectId) {
+      // Re-fetch in full: the calendar listing carries no signups.
+      await click.deferUpdate();
+      event = await raidHelper.getEvent(click.values[0]);
+      continue;
+    }
+
+    if (click.customId === cancelId) {
+      await click.update({
+        content: "Cancelled. Nothing was sent.",
+        embeds: [],
+        components: [],
+      });
+      return;
+    }
+
+    break;
   }
 
   await click.update({

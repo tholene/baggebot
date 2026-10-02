@@ -33,6 +33,8 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
   const raiderRoleId = envSnowflake("RAIDER_ROLE_ID", { required: requireBonkConfig });
   const officerRoleId = envSnowflake("OFFICER_ROLE_ID", { required: requireBonkConfig });
   const excludeRoleIds = envSnowflakeList("EXCLUDE_ROLE_IDS");
+  // Purely cosmetic: who gets the encouraging line when nobody needs a bonk.
+  const ebriUserId = envSnowflake("EBRI_USER_ID", { required: false });
   // Which channels raids are posted in. Guilds post other Raid-Helper events
   // (roster sign-ups, alt lists) elsewhere, and those must never be bonked.
   const raidChannelIds = envSnowflakeList("RAID_CHANNEL_IDS");
@@ -63,6 +65,7 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
     raiderRoleId,
     officerRoleId,
     excludeRoleIds,
+    ebriUserId,
     raidChannelIds,
     raidHelperApiKey,
     dmDelayMs,

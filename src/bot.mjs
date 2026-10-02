@@ -68,8 +68,8 @@ async function main() {
 
   if (!config.raidHelperApiKey) {
     log(
-      "NOTE: RAID_HELPER_TOKEN is not set, so /bonk cannot auto-pick the next raid. " +
-        "Officers will have to pass the `event:` option explicitly."
+      "WARNING: RAID_HELPER_TOKEN is not set, so /bonk cannot read the raid calendar " +
+        "and every invocation will fail. Ask a server admin to run /apikey in Discord."
     );
   }
 

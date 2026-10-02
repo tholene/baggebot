@@ -160,40 +160,40 @@ test("login failures explain which switch to flip", async () => {
   assert.equal(explainLoginError(unknown), unknown);
 });
 
-test("findNextEvent only considers configured raid channels", async () => {
+test("listUpcomingEvents lists future raids soonest first, within the limit", async () => {
   const { makeRaidHelper } = await import("../src/lib/raidhelper.mjs");
   const RAID = "1279867299066675321";
   const OTHER = "1255092003109081120";
   const now = 1_000_000;
 
-  // Stand in for the API: one page, a non-raid event scheduled sooner than the
-  // real raid. Without the filter the sooner one wins and the wrong people get DMed.
+  // Deliberately out of order, with one raid already in the past and one posted
+  // outside the signup channel. Only the future raid-channel ones may be offered.
   const page = {
-    pages: 1, eventsOverall: 2,
+    pages: 1, eventsOverall: 4,
     postedEvents: [
-      { id: "a", title: "Roster thing", channelId: OTHER, startTime: now + 100 },
+      { id: "c", title: "Sunday Raid", channelId: RAID, startTime: now + 900 },
+      { id: "a", title: "Last Tuesday", channelId: RAID, startTime: now - 100 },
       { id: "b", title: "Thursday Raid", channelId: RAID, startTime: now + 200 },
+      { id: "d", title: "Roster thing", channelId: OTHER, startTime: now + 300 },
     ],
-  };
-  const events = {
-    a: { id: "a", title: "Roster thing", channelId: OTHER, startTime: now + 100, signUps: [] },
-    b: { id: "b", title: "Thursday Raid", channelId: RAID, startTime: now + 200, signUps: [] },
   };
 
   const originalFetch = globalThis.fetch;
-  globalThis.fetch = async (url) => {
-    const single = String(url).match(/\/events\/(\w+)$/);
-    const body = single ? events[single[1]] : page;
-    return new Response(JSON.stringify(body), { status: 200 });
-  };
+  globalThis.fetch = async () => new Response(JSON.stringify(page), { status: 200 });
 
   try {
     const rh = makeRaidHelper("test-key");
-    const filtered = await rh.findNextEvent("guild", now, [RAID]);
-    assert.equal(filtered.id, "b", "picked an event outside the raid channel");
 
-    const unfiltered = await rh.findNextEvent("guild", now, []);
-    assert.equal(unfiltered.id, "a", "no filter should mean no filtering");
+    const upcoming = await rh.listUpcomingEvents("guild", now, [RAID]);
+    assert.deepEqual(
+      upcoming.map((event) => event.id),
+      ["b", "c"],
+      "the picker must offer only future raids, soonest first"
+    );
+
+    // Discord caps a select menu at 25 options, so the limit has to bite.
+    const capped = await rh.listUpcomingEvents("guild", now, [RAID], 1);
+    assert.deepEqual(capped.map((event) => event.id), ["b"]);
   } finally {
     globalThis.fetch = originalFetch;
   }
@@ -373,4 +373,34 @@ test("the bonk log never contains the bot token", async (t) => {
   const written = await readFile(file, "utf8");
   assert.ok(!written.includes("pretend-token-value-that-is-long-enough-to-scrub"));
   assert.ok(written.includes("<redacted-token>"));
+});
+
+test("the all-clear line only gets cheerful for Ebri", async () => {
+  const { allClearMessage } = await import("../src/lib/bonk.mjs");
+  const config = { ebriUserId: "42" };
+
+  const plain = allClearMessage({ user: { id: "7", username: "magi" }, config });
+  assert.equal(plain, "Everyone on the roster has answered. Nothing to do.");
+  assert.ok(!plain.includes("\n"), "other officers get the flat line");
+
+  // pick() is the random draw; 0 pins it to the first extra.
+  const forEbri = allClearMessage({ user: { id: "42", username: "someone" }, config, pick: () => 0 });
+  assert.ok(forEbri.startsWith("Everyone on the roster has answered."));
+  assert.ok(forEbri.includes("You can relax, Ebri!"));
+
+  // The ID wins over the name, in both directions.
+  assert.equal(
+    allClearMessage({ user: { id: "7", username: "Ebri" }, config }).includes("Ebri!"),
+    false
+  );
+
+  // With no ID configured, the name is the fallback.
+  const byName = allClearMessage({ user: { id: "7", username: "Ebri" }, config: {}, pick: () => 0 });
+  assert.ok(byName.includes("You can relax, Ebri!"));
+
+  // Every extra is reachable and none of them are empty.
+  for (const r of [0, 0.25, 0.5, 0.75, 0.999]) {
+    const line = allClearMessage({ user: { id: "42" }, config, pick: () => r });
+    assert.ok(line.split("\n")[1]?.length > 0);
+  }
 });

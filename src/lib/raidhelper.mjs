@@ -173,8 +173,9 @@ export function makeRaidHelper(apiKey) {
     async listEvents(serverId) {
       if (!apiKey) {
         throw new SafeError(
-          "Listing a server's events needs RAID_HELPER_TOKEN. Ask a server admin to " +
-            "run /apikey in Discord, or pass an explicit event with the `event:` option."
+          "Listing a server's events needs RAID_HELPER_TOKEN, and /bonk cannot pick a " +
+            "raid without it. Ask a server admin to run /apikey in Discord and put the " +
+            "key in RAID_HELPER_TOKEN."
         );
       }
 
@@ -209,8 +210,8 @@ export function makeRaidHelper(apiKey) {
         // Say so rather than quietly working from a partial calendar.
         throw new SafeError(
           `Raid-Helper reports ${overall} events for this server but only ${collected.length} ` +
-            `could be read across ${pages} page(s). Refusing to guess which raid is next - ` +
-            `pass one explicitly with the \`event:\` option.`
+            `could be read across ${pages} page(s). Refusing to offer a raid list built ` +
+            `from a partial calendar.`
         );
       }
 
@@ -218,12 +219,13 @@ export function makeRaidHelper(apiKey) {
     },
 
     /**
-     * The soonest event that has not started yet. Returns null when the calendar
-     * is empty ahead of us, which is a normal state, not an error.
+     * Every event that has not started yet, soonest first. Summaries only - the
+     * list endpoint does not carry signups, so these are for showing a human a
+     * menu, not for deciding who to DM.
      */
-    async findNextEvent(serverId, nowSeconds, channelIds = []) {
+    async listUpcomingEvents(serverId, nowSeconds, channelIds = [], limit = Infinity) {
       const events = await this.listEvents(serverId);
-      const upcoming = events
+      return events
         .map((event) => ({
           id: String(pick(event, "id", "eventId", "event_id") ?? ""),
           title: String(pick(event, "title", "name") ?? "(untitled event)"),
@@ -233,11 +235,9 @@ export function makeRaidHelper(apiKey) {
         .filter((event) => event.id && event.startTime && event.startTime > nowSeconds)
         // Guilds post things other than raids. Only the signup channel counts.
         .filter((event) => channelIds.length === 0 || channelIds.includes(event.channelId))
-        .sort((a, b) => a.startTime - b.startTime);
-
-      if (upcoming.length === 0) return null;
-      // The list endpoint is a summary; re-fetch the full event for its signups.
-      return this.getEvent(upcoming[0].id);
+        .sort((a, b) => a.startTime - b.startTime)
+        .slice(0, limit);
     },
+
   };
 }

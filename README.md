@@ -31,6 +31,7 @@ scripts/            one-shot tools, run by hand
   inspect-event.mjs       dump a Raid-Helper event payload
   cleanup.mjs             delete historical Raid-Helper posts
   purge-channel.mjs       delete every message in one channel
+  activity-export.mjs     export a channel's history as JSONL (read-only)
   react.mjs               add or remove one reaction
 test/               runs without network or Discord
 logs/               record of DMs actually sent (gitignored)
@@ -88,8 +89,8 @@ people responded; chasing them would be the bug.
 ### 2. Raid-Helper API key
 
 A server admin runs `/apikey` in Discord; Raid-Helper DMs the key back. Put it in
-`RAID_HELPER_TOKEN`. Without it `/bonk` can't auto-pick the next raid and
-officers must pass `event:` explicitly.
+`RAID_HELPER_TOKEN`. Without it `/bonk` can't read the raid calendar at all, and
+every invocation fails — this key is required, not optional.
 
 ### 3. Role IDs
 
@@ -104,6 +105,7 @@ Roles → right-click a role → **Copy Role ID**.
 | `RAID_CHANNEL_IDS` | Comma-separated channels raids are posted in. Events elsewhere are ignored. |
 | `RAID_HELPER_TOKEN` | From `/apikey`. Needed for auto-picking the next raid. |
 | `DM_DELAY_MS` | Milliseconds between DMs. Default 2500, minimum 1000. |
+| `EBRI_USER_ID` | Optional, cosmetic. When nobody needs a bonk, Ebri gets an encouraging line instead of the flat "nothing to do". Falls back to matching her name. |
 
 ### 4. Register the command and start
 
@@ -118,23 +120,24 @@ change. Editing the DM wording or the handler logic doesn't need it.
 ## Usage
 
 ```
-/bonk                                  the next upcoming raid
-/bonk event:1234567890123456789        a specific event
-/bonk event:https://discord.com/...    a message link works too
+/bonk        that's the whole command — it takes no arguments
 ```
 
-The event ID is the Discord message ID of the Raid-Helper post: right-click it
-and Copy Message ID.
+The preview that comes back carries a **dropdown of the upcoming raids**, with
+the soonest one already selected. Switching to a later raid is one tap and
+re-runs the preview against it; the Send button always sends for whatever the
+dropdown currently shows. Nothing to type, nothing to copy — which is the point,
+because officers do this on their phones.
 
-With no `event:`, `/bonk` picks the **soonest event that has not started yet**,
-considering only channels listed in `RAID_CHANNEL_IDS`. A raid already underway
-is never picked, so you cannot bonk people for a raid they are currently in.
+The list is the **events that have not started yet** in the channels named by
+`RAID_CHANNEL_IDS`, soonest first, capped at 25 (Discord's limit on a menu). A
+raid already underway is never offered, so you cannot bonk people for a raid they
+are currently in. The dropdown itself is hidden when there is only one candidate,
+since there would be nothing to choose.
 
 That channel filter matters: guilds post other Raid-Helper events — roster
-sign-ups, alt lists, other teams' raids — and without it a non-raid event
-scheduled sooner would be picked and its non-signers DMed. The filter applies to
-an explicitly passed `event:` too, since pasting the wrong link is exactly the
-mistake worth catching.
+sign-ups, alt lists, other teams' raids — and without it a non-raid event would
+show up in the picker and its non-signers could be DMed.
 
 `/bonk` keeps **no memory between runs**. Every invocation DMs everyone currently
 unsigned. That makes a second reminder closer to raid time trivial — just run it
@@ -524,3 +527,56 @@ Kept:
 > The bot does still hold **Manage Messages** in the signup channel, which
 > `/bonk` has no use for. That is deliberate — the cleanup scripts need it. Narrow
 > it if you retire them.
+
+
+---
+
+# Part 3 — `activity-export.mjs`
+
+Dumps one channel's message history to `logs/activity-<channel-id>.jsonl`, one
+JSON object per message, oldest first. Read-only: it has no delete path and no
+confirmation phrase, but it does copy chat onto disk, so it writes into the
+gitignored `logs/` directory next to `bonks.jsonl`.
+
+```bash
+npm run activity -- <channel-id>
+npm run activity -- <channel-id> --include-provisional --since=2026-08-01
+```
+
+Each record:
+
+```json
+{"id":"…","at":"2026-09-07T13:39:53.559000+00:00","author_id":"…","author":"fink5821",
+ "display_name":"Fink","character":"Finklebear","account":"linked","bot":false,
+ "content":"","edited":false,"reply_to":null,"attachments":0,"type":0}
+```
+
+## Linked vs provisional accounts
+
+The guild chat channel is bridged from in-game chat, so authors come in two
+kinds:
+
+* **Linked** — a real Discord account. Normal username, normal snowflake.
+* **Provisional** — the placeholder Discord mints for someone posting from the
+  game without a linked Discord account. Auto-generated username
+  (`jovial_kitten_04911`), display name set to the character name, and user flag
+  `1 << 23` set. One human can hold several of these, so counting them as people
+  overcounts.
+
+Provisional accounts are excluded by default; `--include-provisional` keeps them.
+`character` carries the in-game name a bridged message was sent from, which is
+what links a provisional account back to a person.
+
+## Message Content intent
+
+**This script needs the Message Content privileged intent, which the rest of the
+project deliberately does without.** Discord returns `content: ""` to every
+application that lacks it — over REST as well as over the gateway — so the export
+is timestamps-only until it is enabled. The script exits non-zero and says so
+rather than writing a file that quietly means nothing.
+
+Enabling it is retroactive: history already in the channel becomes readable, so
+there is no need to "start collecting" before analysis is possible. Turn it on at
+Developer Portal → Bot → Privileged Gateway Intents → Message Content Intent.
+`/bonk` neither needs nor reads it; `src/bot.mjs` does not request the intent, so
+turning it on in the portal changes nothing about how the bot runs.
