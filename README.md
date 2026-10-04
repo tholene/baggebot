@@ -264,6 +264,29 @@ a half-finished DM run is not.
 It is gitignored, since it contains member names and message bodies, and it is a
 mounted volume in the container so it survives a rebuild.
 
+## `/stats` — who has been bonked the most
+
+`/stats` reads the same `logs/bonks.jsonl` and answers with a leaderboard of
+delivered bonks per person (top 15, the rest summed up in one line), plus totals:
+bonks delivered, raiders bonked, raids, the raid that needed the most bonks, and
+how many DMs bounced.
+
+| Option   | Values                              | Default    |
+|----------|-------------------------------------|------------|
+| `period` | All time, Last 30 days, Last 7 days | All time   |
+| `share`  | True / False                        | False      |
+
+- **Same audience as `/bonk`:** the officer role, checked server-side on every
+  call. The list names people, so the reply is private unless `share: True`
+  posts it in the channel.
+- **Read-only.** It never DMs anyone and never contacts Raid-Helper.
+- Only status `sent` counts as a bonk. People are grouped by user id, so a
+  rename does not split anyone in two; the newest display name is shown. Ties
+  share a rank (1, 2, 2, 4).
+
+The counting lives in `src/lib/stats.mjs` (pure functions, tested in
+`test/stats.test.mjs`); `npm run bonks` uses the same parser.
+
 ## Safety model
 
 Mass-DMing is precisely what Discord's spam rules target, so:

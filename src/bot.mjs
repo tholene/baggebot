@@ -24,8 +24,11 @@ import { loadConfig } from "./lib/config.mjs";
 import { makeRaidHelper } from "./lib/raidhelper.mjs";
 import { explainLoginError } from "./lib/discord-errors.mjs";
 import * as bonkCommand from "./commands/bonk.mjs";
+import * as statsCommand from "./commands/stats.mjs";
 
-const commands = new Map([[bonkCommand.data.name, bonkCommand]]);
+const commands = new Map(
+  [bonkCommand, statsCommand].map((command) => [command.data.name, command])
+);
 
 /**
  * Report a failure back to whoever ran the command, without ever leaking

@@ -19,6 +19,7 @@ import { readFile } from "node:fs/promises";
 
 import { SafeError, log, logErr } from "../src/lib/safe.mjs";
 import { bonkLogFile } from "../src/lib/audit.mjs";
+import { parseBonkLog } from "../src/lib/stats.mjs";
 
 const DEFAULT_LIMIT = 20;
 
@@ -51,16 +52,8 @@ async function main() {
     throw new SafeError(`Could not read ${BONK_LOG_FILE}: ${error.message}`);
   }
 
-  const entries = [];
-  let malformed = 0;
-  for (const line of text.split("\n")) {
-    if (!line.trim()) continue;
-    try {
-      entries.push(JSON.parse(line));
-    } catch {
-      malformed++; // a torn final line from a hard kill, most likely
-    }
-  }
+  // A torn final line from a hard kill is counted as malformed, not fatal.
+  const { entries, malformed } = parseBonkLog(text);
 
   if (entries.length === 0) {
     log(`${BONK_LOG_FILE} is empty.`);

@@ -19,8 +19,9 @@ import { REST, Routes } from "discord.js";
 import { SafeError, log, logErr } from "../src/lib/safe.mjs";
 import { loadConfig } from "../src/lib/config.mjs";
 import * as bonkCommand from "../src/commands/bonk.mjs";
+import * as statsCommand from "../src/commands/stats.mjs";
 
-const commands = [bonkCommand.data];
+const commands = [bonkCommand.data, statsCommand.data];
 
 async function main() {
   // Registration only needs to know which application and guild to target.
