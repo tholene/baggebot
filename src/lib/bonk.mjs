@@ -203,6 +203,83 @@ export async function sendBonks({
   return { sent, skipped, failures };
 }
 
+/**
+ * Join items with `separator`, stopping before `max` characters and saying how
+ * many were left out. Embed fields cap at 1024, and a cut-off name is worse
+ * than a count.
+ */
+export function joinWithin(items, separator, max = 1024) {
+  // Lists here are a raid roster at most, so trying shorter prefixes is cheap.
+  for (let shown = items.length; shown >= 0; shown--) {
+    const left = items.length - shown;
+    const parts = items.slice(0, shown);
+    if (left > 0) parts.push(`…and ${left} more`);
+    const out = parts.join(separator);
+    if (out.length <= max) return out;
+  }
+  return "";
+}
+
+/**
+ * The officer-channel report for one /bonk run, as a plain embed object.
+ *
+ * Officers used to post this by hand after every run - who was chased for which
+ * raid - so everyone on the team can see it without asking. It is posted
+ * outside the ephemeral reply, so it never pings: names for the people DMed,
+ * mentions (rendered, not notified, inside an embed) only for the ones an
+ * officer has to chase by hand.
+ */
+export function buildBonkReport({ event, result, invokedBy, guildId, roster, now = new Date() }) {
+  const link = eventLink(guildId, event.channelId, event.id);
+  const sentCount = result.sent.length;
+  const realFailures = result.failures.filter((failure) => failure.member);
+  const aborted = result.failures.find((failure) => !failure.member);
+
+  const when = event.startTime ? ` for <t:${event.startTime}:F>` : "";
+  const lines = [`<@${invokedBy.id}> bonked ${sentCount} raider${sentCount === 1 ? "" : "s"}${when}.`];
+  // The part officers used to screenshot from Raid-Helper's /unsigned.
+  if (roster) {
+    lines.push(`${roster.signedCount} of ${roster.rosterSize} on the roster had signed up.`);
+  }
+  if (aborted) lines.push(`⚠️ ${aborted.reason}`);
+
+  const fields = [];
+  if (sentCount > 0) {
+    fields.push({
+      name: `Bonked (${sentCount})`,
+      value: joinWithin(result.sent.map((member) => member.displayName), ", "),
+    });
+  }
+  if (realFailures.length > 0) {
+    fields.push({
+      name: `Could not DM — chase by hand (${realFailures.length})`,
+      value: joinWithin(
+        realFailures.map((failure) => `${failure.member} (${failure.reason})`),
+        "\n"
+      ),
+    });
+  }
+  if (result.skipped.length > 0) {
+    fields.push({
+      name: `Skipped since the preview (${result.skipped.length})`,
+      value: joinWithin(
+        result.skipped.map((entry) => `${entry.member.displayName}: ${entry.reason}`),
+        "\n"
+      ),
+    });
+  }
+
+  return {
+    title: `Bonked: ${event.title}`.slice(0, 256),
+    ...(link ? { url: link } : {}),
+    description: lines.join("\n"),
+    color: result.failures.length > 0 ? 0xe74c3c : 0x2ecc71,
+    fields,
+    footer: { text: `Event ${event.id}` },
+    timestamp: now.toISOString(),
+  };
+}
+
 /** What the preview says when there is nobody left to chase. */
 const ALL_CLEAR = "Everyone on the roster has answered. Nothing to do.";
 

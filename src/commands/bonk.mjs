@@ -27,6 +27,7 @@ import {
   eventLink,
   makeEmojiResolver,
   allClearMessage,
+  buildBonkReport,
 } from "../lib/bonk.mjs";
 
 /** How long the confirm button stays live. */
@@ -151,7 +152,7 @@ function buildPreviewEmbed({ event, diff, config, guildId }) {
   return embed;
 }
 
-function buildResultEmbed({ event, result }) {
+function buildResultEmbed({ event, result, report }) {
   const embed = new EmbedBuilder()
     .setTitle(`Bonked: ${event.title}`)
     .setColor(result.failures.length > 0 ? 0xe74c3c : 0x2ecc71)
@@ -160,6 +161,12 @@ function buildResultEmbed({ event, result }) {
       { name: "Failed", value: `${result.failures.length}`, inline: true },
       { name: "Skipped", value: `${result.skipped.length}`, inline: true }
     );
+
+  if (report?.url) {
+    embed.setDescription(`Report posted for the officers: ${report.url}`);
+  } else if (report) {
+    embed.setDescription(`⚠️ Could not post the officer report: ${report.reason}`);
+  }
 
   const realFailures = result.failures.filter((failure) => failure.member);
   if (realFailures.length > 0) {
@@ -184,6 +191,44 @@ function buildResultEmbed({ event, result }) {
   }
 
   return embed;
+}
+
+/**
+ * Post the run's report to BONK_REPORT_CHANNEL_ID, if set.
+ *
+ * The DMs have already gone out by now, so nothing here may throw: a missing
+ * permission or an archived thread turns into a line in the officer's reply,
+ * not an error that hides the send result.
+ *
+ * @returns null when no report channel is configured, else { url } or { reason }
+ */
+async function postReport({ interaction, config, event, result, diff }) {
+  const channelId = config.bonkReportChannelId;
+  if (!channelId) return null;
+
+  try {
+    const channel = await interaction.client.channels.fetch(channelId);
+    if (!channel || channel.guildId !== config.guildId || typeof channel.send !== "function") {
+      return { reason: `<#${channelId}> is not a text channel or thread in this server.` };
+    }
+    const embed = buildBonkReport({
+      event,
+      result,
+      invokedBy: interaction.user,
+      guildId: interaction.guildId,
+      roster: diff,
+    });
+    // Belt and braces: embeds do not ping anyway, and neither does this.
+    const message = await channel.send({ embeds: [embed], allowedMentions: { parse: [] } });
+    return { url: message.url };
+  } catch (error) {
+    logErr(`/bonk report to ${channelId} failed: ${error?.message ?? error}`);
+    const reason =
+      error?.code === 50001 || error?.code === 50013
+        ? `the bot lacks permission to post in <#${channelId}>.`
+        : `${error?.message ?? "unknown error"}.`;
+    return { reason };
+  }
 }
 
 export async function execute(interaction, context) {
@@ -335,9 +380,11 @@ export async function execute(interaction, context) {
     },
   });
 
+  const report = await postReport({ interaction, config, event, result, diff });
+
   await interaction.editReply({
     content: "",
-    embeds: [buildResultEmbed({ event, result })],
+    embeds: [buildResultEmbed({ event, result, report })],
     components: [],
   });
 

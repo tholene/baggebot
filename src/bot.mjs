@@ -97,6 +97,20 @@ async function main() {
         config.raidChannelIds.length ? config.raidChannelIds.join(", ") : "(all - unfiltered)"
       }`
     );
+    if (config.bonkReportChannelId) {
+      // Checked now so a wrong ID shows up in the logs, not after the first send.
+      ready.channels
+        .fetch(config.bonkReportChannelId)
+        .then((channel) => log(`Bonk reports go to #${channel?.name ?? config.bonkReportChannelId}`))
+        .catch((error) =>
+          log(
+            `WARNING: cannot see BONK_REPORT_CHANNEL_ID ${config.bonkReportChannelId} ` +
+              `(${error?.message ?? error}). /bonk will still send, but not report.`
+          )
+        );
+    } else {
+      log("Bonk reports: off (BONK_REPORT_CHANNEL_ID not set)");
+    }
     log("Ready. Waiting for /bonk.");
   });
 

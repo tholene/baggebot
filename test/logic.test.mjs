@@ -10,7 +10,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { normaliseEvent } from "../src/lib/raidhelper.mjs";
-import { renderMessage, loadTemplate, eventLink } from "../src/lib/bonk.mjs";
+import {
+  renderMessage,
+  loadTemplate,
+  eventLink,
+  joinWithin,
+  buildBonkReport,
+} from "../src/lib/bonk.mjs";
 import { diffRoster } from "../src/lib/roster.mjs";
 import { envSnowflakeList, envInt, SafeError } from "../src/lib/safe.mjs";
 
@@ -403,4 +409,78 @@ test("the all-clear line only gets cheerful for Ebri", async () => {
     const line = allClearMessage({ user: { id: "42" }, config, pick: () => r });
     assert.ok(line.split("\n")[1]?.length > 0);
   }
+});
+
+test("joinWithin fits the limit and counts what it left out", () => {
+  assert.equal(joinWithin(["a", "b", "c"], ", ", 100), "a, b, c");
+  assert.equal(joinWithin([], ", "), "");
+
+  const names = Array.from({ length: 50 }, (_, i) => `Raider${String(i).padStart(2, "0")}`);
+  const out = joinWithin(names, ", ", 100);
+  assert.ok(out.length <= 100);
+  const shown = out.split(", ").filter((part) => part.startsWith("Raider")).length;
+  assert.ok(out.endsWith(`…and ${50 - shown} more`), out);
+
+  // A single item too long to fit is counted, never cut mid-name.
+  assert.equal(joinWithin(["x".repeat(20)], ", ", 12), "…and 1 more");
+});
+
+test("the officer report lists who was bonked and who to chase", () => {
+  const event = { id: "555", title: "Thursday Raid", channelId: "888", startTime: 1792009800 };
+  const result = {
+    sent: [fakeMember("1", "Peaves"), fakeMember("2", "Stuart")],
+    failures: [{ member: fakeMember("3", "jazz"), reason: "has DMs closed", code: 50007 }],
+    skipped: [{ member: fakeMember("4", "Farug"), reason: "Farug has signed up since the preview." }],
+  };
+  const report = buildBonkReport({
+    event,
+    result,
+    invokedBy: { id: "42" },
+    guildId: "999",
+    roster: { rosterSize: 37, signedCount: 29 },
+    now: new Date(0),
+  });
+
+  assert.equal(report.title, "Bonked: Thursday Raid");
+  assert.equal(report.url, "https://discord.com/channels/999/888/555");
+  assert.equal(
+    report.description,
+    "<@42> bonked 2 raiders for <t:1792009800:F>.\n29 of 37 on the roster had signed up."
+  );
+  assert.equal(report.color, 0xe74c3c, "red when anyone could not be DMed");
+
+  const field = (prefix) => report.fields.find((f) => f.name.startsWith(prefix));
+  assert.equal(field("Bonked").name, "Bonked (2)");
+  assert.equal(field("Bonked").value, "Peaves, Stuart");
+  assert.equal(field("Could not DM").value, "<@3> (has DMs closed)");
+  assert.equal(field("Skipped").value, "Farug: Farug has signed up since the preview.");
+  for (const f of report.fields) assert.ok(f.value.length <= 1024);
+});
+
+test("the officer report stays green and quiet when every DM went out", () => {
+  const report = buildBonkReport({
+    event: { id: "555", title: "Raid", channelId: "", startTime: null },
+    result: { sent: [fakeMember("1", "Solo")], failures: [], skipped: [] },
+    invokedBy: { id: "42" },
+    guildId: "999",
+  });
+  assert.equal(report.color, 0x2ecc71);
+  assert.equal(report.url, undefined, "no broken link without a channel");
+  assert.equal(report.description, "<@42> bonked 1 raider.");
+  assert.deepEqual(report.fields.map((f) => f.name), ["Bonked (1)"]);
+});
+
+test("the officer report flags an aborted run", () => {
+  const report = buildBonkReport({
+    event: { id: "555", title: "Raid", channelId: "888", startTime: null },
+    result: {
+      sent: [],
+      failures: [{ member: null, reason: "Aborted: Discord rejected the bot's credentials.", code: 40001 }],
+      skipped: [],
+    },
+    invokedBy: { id: "42" },
+    guildId: "999",
+  });
+  assert.ok(report.description.includes("⚠️ Aborted"));
+  assert.equal(report.fields.length, 0);
 });

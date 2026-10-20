@@ -107,6 +107,7 @@ Roles → right-click a role → **Copy Role ID**.
 | `RAID_HELPER_TOKEN` | From `/apikey`. Needed for auto-picking the next raid. |
 | `DM_DELAY_MS` | Milliseconds between DMs. Default 2500, minimum 1000. |
 | `EBRI_USER_ID` | Optional, cosmetic. When nobody needs a bonk, Ebri gets an encouraging line instead of the flat "nothing to do". Falls back to matching her name. |
+| `BONK_REPORT_CHANNEL_ID` | Optional. A channel or thread where every `/bonk` run is reported for the other officers. See [The officer report](#the-officer-report). |
 
 ### 4. Register the command and start
 
@@ -145,6 +146,28 @@ unsigned. That makes a second reminder closer to raid time trivial — just run 
 again — but it also means running it twice in quick succession reminds the same
 people twice. The preview and the confirm button are what stand between you and
 that.
+
+## The officer report
+
+The preview and result are ephemeral — only the officer who ran `/bonk` sees
+them. With `BONK_REPORT_CHANNEL_ID` set, every confirmed run also posts a
+report there (for this guild: the *Signups and missed raids* thread in
+#raid-management-team), so the rest of the officers can see it without asking:
+
+* who ran it, for which raid, when the raid starts, and how many of the roster
+  had signed up
+* everyone who was DMed, by name
+* anyone whose DM failed, as mentions to chase by hand, and anyone skipped
+  because they signed up between the preview and the send
+
+The report never pings anyone. Cancelled or timed-out previews, and previews
+where nobody needed a bonk, post nothing.
+
+The bot needs **View Channel** and **Send Messages in Threads** (or **Send
+Messages** for a plain channel) there. If posting fails, the DMs have still
+gone out; the officer's result says the report could not be posted and why.
+At startup the bot logs which channel reports go to, or a warning if it cannot
+see it.
 
 ## The DM
 
