@@ -15,6 +15,7 @@
     "scan": "node scripts/cleanup.mjs",
     "cleanup": "node scripts/cleanup.mjs",
     "react": "node scripts/react.mjs",
+    "say": "node scripts/say.mjs",
     "purge": "node scripts/purge-channel.mjs",
     "activity": "node scripts/activity-export.mjs"
   },

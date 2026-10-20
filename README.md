@@ -33,6 +33,7 @@ scripts/            one-shot tools, run by hand
   purge-channel.mjs       delete every message in one channel
   activity-export.mjs     export a channel's history as JSONL (read-only)
   react.mjs               add or remove one reaction
+  say.mjs                 post one message (pings at most one user)
 test/               runs without network or Discord
 logs/               record of DMs actually sent (gitignored)
 ```
