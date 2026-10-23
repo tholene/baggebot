@@ -25,9 +25,10 @@ import { makeRaidHelper } from "./lib/raidhelper.mjs";
 import { explainLoginError } from "./lib/discord-errors.mjs";
 import * as bonkCommand from "./commands/bonk.mjs";
 import * as statsCommand from "./commands/stats.mjs";
+import * as missingCommand from "./commands/missing.mjs";
 
 const commands = new Map(
-  [bonkCommand, statsCommand].map((command) => [command.data.name, command])
+  [bonkCommand, statsCommand, missingCommand].map((command) => [command.data.name, command])
 );
 
 /**
@@ -110,6 +111,21 @@ async function main() {
         );
     } else {
       log("Bonk reports: off (BONK_REPORT_CHANNEL_ID not set)");
+    }
+    if (config.missingReportChannelId) {
+      ready.channels
+        .fetch(config.missingReportChannelId)
+        .then((channel) =>
+          log(`/missing reports go to #${channel?.name ?? config.missingReportChannelId}`)
+        )
+        .catch((error) =>
+          log(
+            `WARNING: cannot see MISSING_REPORT_CHANNEL_ID ${config.missingReportChannelId} ` +
+              `(${error?.message ?? error}). /missing will only answer privately.`
+          )
+        );
+    } else {
+      log("/missing reports: off (MISSING_REPORT_CHANNEL_ID not set)");
     }
     log("Ready. Waiting for /bonk.");
   });

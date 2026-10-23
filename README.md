@@ -15,7 +15,7 @@ v4 API. Node 18+ (developed on 24). Dependencies: `discord.js` and `dotenv`.
 
 ```bash
 npm install
-npm test           # 17 tests, no network or Discord needed
+npm test           # no network or Discord needed
 npm run check      # every file parses
 ```
 
@@ -25,6 +25,8 @@ npm run check      # every file parses
 src/                the always-on half
   bot.mjs             gateway client and interaction router
   commands/bonk.mjs   the /bonk command
+  commands/stats.mjs  the /stats command
+  commands/missing.mjs  the /missing command
   lib/                config, Raid-Helper client, roster diff, DM loop, state
 scripts/            one-shot tools, run by hand
   register-commands.mjs   register /bonk with Discord
@@ -101,13 +103,14 @@ Roles → right-click a role → **Copy Role ID**.
 | Variable | Meaning |
 | --- | --- |
 | `RAIDER_ROLE_ID` | The roster. Everyone with this role is expected to sign up. |
-| `OFFICER_ROLE_ID` | Who may run `/bonk`. Checked server-side, every invocation. |
+| `OFFICER_ROLE_ID` | Who may run `/bonk`, `/stats` and `/missing`. Checked server-side, every invocation. |
 | `EXCLUDE_ROLE_IDS` | Optional, comma-separated. Trials, socials, alt-only members. |
 | `RAID_CHANNEL_IDS` | Comma-separated channels raids are posted in. Events elsewhere are ignored. |
 | `RAID_HELPER_TOKEN` | From `/apikey`. Needed for auto-picking the next raid. |
 | `DM_DELAY_MS` | Milliseconds between DMs. Default 2500, minimum 1000. |
 | `EBRI_USER_ID` | Optional, cosmetic. When nobody needs a bonk, Ebri gets an encouraging line instead of the flat "nothing to do". Falls back to matching her name. |
 | `BONK_REPORT_CHANNEL_ID` | Optional. A channel or thread where every `/bonk` run is reported for the other officers. See [The officer report](#the-officer-report). |
+| `MISSING_REPORT_CHANNEL_ID` | Optional. Where `/missing` posts its result. For this guild: `1501938247050203236`. See [`/missing`](#missing--who-hasnt-reacted-to-a-post). |
 
 ### 4. Register the command and start
 
@@ -310,6 +313,40 @@ how many DMs bounced.
 
 The counting lives in `src/lib/stats.mjs` (pure functions, tested in
 `test/stats.test.mjs`); `npm run bonks` uses the same parser.
+
+## `/missing` — who hasn't reacted to a post
+
+For the "I'm looking for all raiders to respond to this one" posts. Give it the
+post and it works out who in the role hasn't reacted or voted yet, then posts
+the list to `MISSING_REPORT_CHANNEL_ID` for the officers. The officer who ran
+it also gets the result privately, with a link to the posted copy.
+
+```
+/missing post: https://discord.com/channels/240837008212230144/1243527159012921416/1550083728993165453
+/missing post: 1550083728993165453 role: @Raider
+```
+
+| Option | Value                                                        | Default          |
+|--------|--------------------------------------------------------------|------------------|
+| `post` | The message link (long-press → Copy Message Link), or its ID | required         |
+| `role` | Who was supposed to respond                                  | `RAIDER_ROLE_ID` |
+
+- **Anything counts as a response:** any reaction (super reactions included),
+  or a vote in a Discord poll. Whoever wrote the post counts as having
+  responded. Bots never count as missing.
+- For the raider role, `EXCLUDE_ROLE_IDS` applies just as in `/bonk`, so trials
+  and socials are not chased. Any other role is taken as it is.
+- **A link is better than an ID:** it says which channel the post is in. With
+  a bare ID the bot tries the current channel first, then every channel and
+  active thread it can read.
+- **Nobody is DMed or pinged.** The list is names, not mentions.
+- Run it again whenever you like; each run is a fresh count.
+
+The bot needs **View Channel** and **Read Message History** where the post is,
+and permission to post in the report channel. If posting the report fails, the
+officer still gets the result and is told why. Message Content Intent stays
+off: without it the report title is generic and poll answers are found by
+probing, but the count is the same.
 
 ## Safety model
 

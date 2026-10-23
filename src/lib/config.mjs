@@ -41,6 +41,9 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
   // Where /bonk posts a report of each run for the other officers. A thread ID
   // works as well as a channel ID. Empty means no report.
   const bonkReportChannelId = envSnowflake("BONK_REPORT_CHANNEL_ID", { required: false });
+  // Where /missing posts who has not responded to a post. Empty means the
+  // result only goes to the officer who asked.
+  const missingReportChannelId = envSnowflake("MISSING_REPORT_CHANNEL_ID", { required: false });
   // Accept either name: RAID_HELPER_TOKEN is what /apikey calls it, and
   // RAID_HELPER_API_KEY is what earlier versions of .env.example documented.
   const raidHelperApiKey = env("RAID_HELPER_TOKEN") || env("RAID_HELPER_API_KEY");
@@ -71,6 +74,7 @@ export function loadConfig({ requireBonkConfig = true } = {}) {
     ebriUserId,
     raidChannelIds,
     bonkReportChannelId,
+    missingReportChannelId,
     raidHelperApiKey,
     dmDelayMs,
   };

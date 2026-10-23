@@ -20,8 +20,9 @@ import { SafeError, log, logErr } from "../src/lib/safe.mjs";
 import { loadConfig } from "../src/lib/config.mjs";
 import * as bonkCommand from "../src/commands/bonk.mjs";
 import * as statsCommand from "../src/commands/stats.mjs";
+import * as missingCommand from "../src/commands/missing.mjs";
 
-const commands = [bonkCommand.data, statsCommand.data];
+const commands = [bonkCommand.data, statsCommand.data, missingCommand.data];
 
 async function main() {
   // Registration only needs to know which application and guild to target.
