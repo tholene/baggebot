@@ -26,9 +26,10 @@ import { explainLoginError } from "./lib/discord-errors.mjs";
 import * as bonkCommand from "./commands/bonk.mjs";
 import * as statsCommand from "./commands/stats.mjs";
 import * as missingCommand from "./commands/missing.mjs";
+import * as missingMenuCommand from "./commands/missing-menu.mjs";
 
 const commands = new Map(
-  [bonkCommand, statsCommand, missingCommand].map((command) => [command.data.name, command])
+  [bonkCommand, statsCommand, missingCommand, missingMenuCommand].map((command) => [command.data.name, command])
 );
 
 /**
@@ -131,7 +132,8 @@ async function main() {
   });
 
   client.on(Events.InteractionCreate, async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
+    // Slash commands, and "Who hasn't reacted?" from a message's right-click menu.
+    if (!interaction.isChatInputCommand() && !interaction.isMessageContextMenuCommand()) return;
 
     const command = commands.get(interaction.commandName);
     if (!command) {

@@ -21,8 +21,9 @@ import { loadConfig } from "../src/lib/config.mjs";
 import * as bonkCommand from "../src/commands/bonk.mjs";
 import * as statsCommand from "../src/commands/stats.mjs";
 import * as missingCommand from "../src/commands/missing.mjs";
+import * as missingMenuCommand from "../src/commands/missing-menu.mjs";
 
-const commands = [bonkCommand.data, statsCommand.data, missingCommand.data];
+const commands = [bonkCommand.data, statsCommand.data, missingCommand.data, missingMenuCommand.data];
 
 async function main() {
   // Registration only needs to know which application and guild to target.

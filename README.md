@@ -27,6 +27,7 @@ src/                the always-on half
   commands/bonk.mjs   the /bonk command
   commands/stats.mjs  the /stats command
   commands/missing.mjs  the /missing command
+  commands/missing-menu.mjs  the same, from a message's right-click menu
   lib/                config, Raid-Helper client, roster diff, DM loop, state
 scripts/            one-shot tools, run by hand
   register-commands.mjs   register /bonk with Discord
@@ -320,6 +321,12 @@ For the "I'm looking for all raiders to respond to this one" posts. Give it the
 post and it works out who in the role hasn't reacted or voted yet, then posts
 the list to `MISSING_REPORT_CHANNEL_ID` for the officers. The officer who ran
 it also gets the result privately, with a link to the posted copy.
+
+The quick way: right-click the post (long-press on mobile) → **Apps** →
+**Who hasn't reacted?**. Nothing to copy or paste. Discord doesn't let menu
+commands take options, so this one always checks the raider role.
+
+To check a different role, use the slash command:
 
 ```
 /missing post: https://discord.com/channels/240837008212230144/1243527159012921416/1550083728993165453

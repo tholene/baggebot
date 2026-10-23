@@ -7,6 +7,9 @@
  *
  * Read-only towards members: nobody is DMed or pinged. The only write is the
  * report itself.
+ *
+ * The same check is on the message right-click menu (missing-menu.mjs), which
+ * needs no link but always checks the raider role.
  */
 
 import {
@@ -188,39 +191,35 @@ async function postReport({ interaction, config, embed }) {
   }
 }
 
-export async function execute(interaction, context) {
-  const { config } = context;
-
+/**
+ * The guild and officer checks shared by /missing and its right-click
+ * version. Replies and returns false when the caller may not run it.
+ */
+export async function allowed(interaction, config, commandLabel) {
   if (!interaction.inGuild() || interaction.guildId !== config.guildId) {
     await interaction.reply({
       content: "This command only works in the configured guild.",
       flags: MessageFlags.Ephemeral,
     });
-    return;
+    return false;
   }
 
   // Same gate as /bonk, checked server-side on every invocation.
   if (!interaction.member.roles.cache.has(config.officerRoleId)) {
     await interaction.reply({
-      content: "Only officers can use `/missing`.",
+      content: `Only officers can use ${commandLabel}.`,
       flags: MessageFlags.Ephemeral,
     });
-    return;
+    return false;
   }
 
-  const ref = parseMessageRef(interaction.options.getString("post", true));
-  if (!ref) {
-    throw new SafeError(
-      "That doesn't look like a message link or ID. Long-press the post → Copy Message Link."
-    );
-  }
-  if (ref.guildId && ref.guildId !== config.guildId) {
-    throw new SafeError("That post is in a different server.");
-  }
+  return true;
+}
 
+/** Count, report and answer, once the post and the role are known. */
+export async function runMissing(interaction, config, { ref, roleId }) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  const roleId = interaction.options.getRole("role")?.id ?? config.raiderRoleId;
   // Trials, socials and alt-only members are left off the raider roster for
   // /bonk, and the same people are not expected to answer "all raiders".
   // Any other role is taken as it is.
@@ -254,7 +253,25 @@ export async function execute(interaction, context) {
   await interaction.editReply({ content, embeds: [embed] });
 
   logErr(
-    `/missing by ${interaction.user.tag}: message ${message.id}, role ${roleId}, ` +
+    `${interaction.commandName} by ${interaction.user.tag}: message ${message.id}, role ${roleId}, ` +
       `${diff.signedCount}/${diff.rosterSize} responded, ${diff.unsigned.length} missing`
   );
+}
+
+export async function execute(interaction, context) {
+  const { config } = context;
+  if (!(await allowed(interaction, config, "`/missing`"))) return;
+
+  const ref = parseMessageRef(interaction.options.getString("post", true));
+  if (!ref) {
+    throw new SafeError(
+      "That doesn't look like a message link or ID. Long-press the post → Copy Message Link."
+    );
+  }
+  if (ref.guildId && ref.guildId !== config.guildId) {
+    throw new SafeError("That post is in a different server.");
+  }
+
+  const roleId = interaction.options.getRole("role")?.id ?? config.raiderRoleId;
+  await runMissing(interaction, config, { ref, roleId });
 }
